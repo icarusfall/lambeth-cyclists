@@ -13,10 +13,10 @@ import anthropic
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
+from core.claude import MODEL, parse_resuming
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-sonnet-5"
 
 
 class Story(BaseModel):
@@ -36,24 +36,8 @@ def client() -> anthropic.Anthropic:
 
 
 def _parse_resuming(**kwargs):
-    """messages.parse(), resumed across pause_turn.
-
-    web_search and web_fetch run on Anthropic's servers, and a turn using them
-    can come back with stop_reason "pause_turn" before the model has finished.
-    Parsing that response still yields a schema-valid object — but one the
-    model filled with stubs rather than findings, which is worse than an
-    error because it looks like an answer. Resume until the turn really ends.
-    """
-    convo = list(kwargs.pop("messages"))
-    timeout = kwargs.pop("timeout", None)
-    api = client().with_options(timeout=timeout) if timeout else client()
-    response = None
-    for _ in range(5):
-        response = api.messages.parse(messages=convo, **kwargs)
-        if response.stop_reason != "pause_turn":
-            return response
-        convo = convo + [{"role": "assistant", "content": response.content}]
-    return response
+    """messages.parse(), resumed across pause_turn. See core.claude."""
+    return parse_resuming(client(), **kwargs)
 
 
 VOICE = (

@@ -11,6 +11,8 @@ from pathlib import Path
 from anthropic import Anthropic
 from anthropic.types import Message
 
+from core.claude import MODEL, response_text_of
+
 from config.settings import get_settings
 from config.logging_config import get_logger
 from models.prompts import (
@@ -23,17 +25,6 @@ from models.prompts import (
 from models.email_data import EmailAttachment
 
 logger = get_logger(__name__)
-
-# Sonnet 5 runs adaptive thinking by default, so responses lead with a thinking
-# block and sampling parameters (temperature/top_p/top_k) are rejected. Depth is
-# controlled per-call with output_config={"effort": ...} instead.
-MODEL = "claude-sonnet-5"
-
-
-def response_text_of(message: Message) -> str:
-    """Concatenate the text blocks of a response, skipping thinking blocks."""
-    return "".join(b.text for b in message.content if b.type == "text").strip()
-
 
 class ClaudeService:
     """

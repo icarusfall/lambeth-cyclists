@@ -7,7 +7,8 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Tuple
 
 from config.logging_config import get_logger
-from services.claude_service import ClaudeService, response_text_of
+from core.claude import response_text_of
+from services.claude_service import ClaudeService
 from services.notion_service import NotionService
 from models.notion_schemas import NotionMeeting, NotionItem, NotionProject, NotionQueryFilter, NotionQuerySort
 

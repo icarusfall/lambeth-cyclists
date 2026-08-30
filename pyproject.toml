@@ -1,0 +1,18 @@
+[project]
+name = "lambeth-cyclists"
+version = "0.1.0"
+description = "Tooling for Lambeth Cyclists: email processor, members' portal, MCP server"
+requires-python = ">=3.10"
+# Dependencies live in requirements.txt, which is what Railway installs.
+# This file exists so `core` is importable as a package from the services,
+# which each run with their own directory as the working directory.
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Only `core` is a distributable package. processor/, portal/ and mcp/ are
+# applications run in place, not libraries to be imported by name.
+packages = ["core"]

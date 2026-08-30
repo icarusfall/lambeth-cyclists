@@ -6,6 +6,10 @@
 # library at two versions in two places — which is exactly how the processor
 # ended up a major version behind on notion-client.
 
+# The shared core/ package, installed from pyproject.toml so the services
+# can import it while running from their own directories.
+-e .
+
 # --- Shared ---
 # Notion: v3 data-sources API, used by all three services.
 notion-client>=3,<4
