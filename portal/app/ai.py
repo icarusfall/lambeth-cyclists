@@ -13,6 +13,8 @@ import anthropic
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
+from app.notion import client as notion_client
+from core import cyclebot
 from core.claude import MODEL, parse_resuming
 
 logger = logging.getLogger(__name__)
@@ -130,51 +132,27 @@ def news_scan(existing_headlines: list[str]) -> list[Story]:
     return response.parsed_output.stories
 
 
-CHAT_SYSTEM = (
-    VOICE
-    + " You are the assistant inside the Lambeth Cyclists members' portal, "
-    "talking to a committee member. Use the Notion tools to look things up "
-    "before answering — never guess or make up data. You can summarise "
-    "anything in the databases (all filed emails/items, meetings, projects, "
-    "ward and councillor research), including things that weren't picked for "
-    "the newsletter. Keep answers concise and practical; members are busy. "
-    "You have read-only access — for edits, point them at Notion or the "
-    "newsletter builder. If you can't find something, say so honestly."
+# What is different about this surface. Everything CycleBot always does — who
+# it is, look things up before answering, read-only, say so when it can't find
+# something — lives in core.cyclebot.SYSTEM, so the portal and any later
+# surface behave the same without being kept in step by hand.
+CHAT_SURFACE = (
+    "You are talking to a committee member inside the members' portal. The "
+    "portal is behind a login, so you can discuss anything in the databases "
+    "freely."
 )
 
 
 def chat_reply(messages: list[dict]) -> str:
     """One portal-chat turn. `messages` is the full [{role, content}] history.
 
-    Uses the MCP connector to give Claude the CycleBot MCP server's read-only
-    Notion tools. Server-side tool loops can pause (`pause_turn`) — resume a
-    few times before giving up.
+    The tools run in this process — see core.cyclebot. This used to go out
+    through the Anthropic MCP connector to the CycleBot server on Railway,
+    which meant Anthropic's servers called our tools over the public internet;
+    that is why the MCP server needed a bearer key. Same tools, no round trip.
     """
-    settings = get_settings()
-    mcp_servers = [
-        {
-            "type": "url",
-            "url": settings.mcp_server_url,
-            "name": "lambeth-cyclists",
-            "authorization_token": settings.mcp_api_key,
-        }
-    ]
-    convo = list(messages)
-    for _ in range(4):
-        response = client().with_options(timeout=120.0).beta.messages.create(
-            model=MODEL,
-            max_tokens=4096,
-            output_config={"effort": "medium"},
-            system=CHAT_SYSTEM,
-            betas=["mcp-client-2025-11-20"],
-            mcp_servers=mcp_servers,
-            tools=[{"type": "mcp_toolset", "mcp_server_name": "lambeth-cyclists"}],
-            messages=convo,
-        )
-        if response.stop_reason != "pause_turn":
-            break
-        convo = convo + [{"role": "assistant", "content": response.content}]
-    return "".join(b.text for b in response.content if b.type == "text").strip()
+    cyclebot.use_notion_client(notion_client())
+    return cyclebot.answer(messages, surface=CHAT_SURFACE, client=client())
 
 
 def draft_newsletter(

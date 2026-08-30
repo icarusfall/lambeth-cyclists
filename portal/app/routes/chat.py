@@ -15,6 +15,16 @@ router = APIRouter()
 MAX_TURNS = 20  # cap history sent to the API to keep token costs bounded
 
 
+def _configured() -> bool:
+    """Chat reads Notion and calls Claude in this process — it needs both keys.
+
+    It used to need MCP_API_KEY instead, back when the tools lived behind
+    the CycleBot MCP server. See core.cyclebot.
+    """
+    s = get_settings()
+    return bool(s.anthropic_api_key and s.notion_api_token)
+
+
 class ChatMessage(BaseModel):
     role: str
     content: str
@@ -29,7 +39,7 @@ async def chat_page(request: Request, user: str = Depends(require_user)):
     return templates.TemplateResponse(
         request,
         "chat.html",
-        {"user": user, "configured": bool(get_settings().mcp_api_key)},
+        {"user": user, "configured": _configured()},
     )
 
 
@@ -37,9 +47,10 @@ async def chat_page(request: Request, user: str = Depends(require_user)):
 async def chat_api(
     body: ChatRequest, user: str = Depends(require_user)
 ):
-    if not get_settings().mcp_api_key:
+    if not _configured():
         return JSONResponse(
-            {"error": "Chat isn't configured yet (MCP_API_KEY missing)."},
+            {"error": "Chat isn't configured yet (ANTHROPIC_API_KEY or "
+                      "NOTION_API_TOKEN missing)."},
             status_code=503,
         )
     messages = [

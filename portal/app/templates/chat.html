@@ -8,8 +8,8 @@ filed emails/items, projects, and the ward &amp; councillor research. Try:
 the newsletter”</em> or <em>“what did the last meeting decide?”</em></p>
 
 {% if not configured %}
-<p class="flash err">Chat isn't configured yet — the MCP_API_KEY environment
-variable is missing.</p>
+<p class="flash err">Chat isn't configured yet — ANTHROPIC_API_KEY or
+NOTION_API_TOKEN is missing.</p>
 {% endif %}
 
 <div id="chat-log"></div>

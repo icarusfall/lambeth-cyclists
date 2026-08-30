@@ -24,10 +24,6 @@ class Settings(BaseSettings):
     # AI
     anthropic_api_key: str = Field(default="", validation_alias=AliasChoices("ANTHROPIC_API_KEY", "CLAUDE_API_KEY"))
 
-    # Chat (CycleBot MCP server on Railway)
-    mcp_server_url: str = "https://lambeth-cyclists-mcp-production.up.railway.app/mcp"
-    mcp_api_key: str = ""
-
     # Hosts that redirect away instead of serving the portal.
     # The bare domain reads as the organisation's front door, so it belongs to
     # the public site rather than a login wall; members come in on a subdomain
