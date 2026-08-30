@@ -3,9 +3,9 @@
 import logging
 
 import markdown as md
-import resend
 
 from app.config import get_settings
+from core.mail import send as core_send
 
 logger = logging.getLogger(__name__)
 
@@ -36,33 +36,25 @@ def markdown_to_email_html(markdown_body: str) -> str:
 def send_plain(to_email: str, subject: str, body_text: str) -> str:
     """Small utility email (password resets etc.). Returns the Resend id."""
     settings = get_settings()
-    resend.api_key = settings.resend_api_key
-    response = resend.Emails.send(
-        {
-            "from": settings.newsletter_from,
-            "to": [to_email],
-            "subject": subject,
-            "text": body_text,
-        }
+    return core_send(
+        api_key=settings.resend_api_key,
+        from_email=settings.newsletter_from,
+        to=to_email,
+        subject=subject,
+        text=body_text,
     )
-    return response.get("id", "unknown")
 
 
 def send_newsletter(subject: str, markdown_body: str, to_email: str) -> str:
     """Send the newsletter. Returns the Resend email id. Raises on failure."""
     settings = get_settings()
-    resend.api_key = settings.resend_api_key
-    params = {
-        "from": settings.newsletter_from,
-        "to": [to_email],
-        "subject": subject,
-        "text": markdown_body,
-        "html": markdown_to_email_html(markdown_body),
-    }
-    # newsletter@lambethcyclists.com has no mailbox — route replies somewhere read
-    if settings.newsletter_reply_to:
-        params["reply_to"] = [settings.newsletter_reply_to]
-    response = resend.Emails.send(params)
-    email_id = response.get("id", "unknown")
-    logger.info("Newsletter sent to %s (resend id %s)", to_email, email_id)
-    return email_id
+    return core_send(
+        api_key=settings.resend_api_key,
+        from_email=settings.newsletter_from,
+        to=to_email,
+        subject=subject,
+        text=markdown_body,
+        html=markdown_to_email_html(markdown_body),
+        # newsletter@lambethcyclists.com has no mailbox behind it
+        reply_to=settings.newsletter_reply_to or None,
+    )

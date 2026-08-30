@@ -3,12 +3,13 @@ Email Service
 Sends email notifications and reminders using Resend API.
 """
 
-import resend
 from datetime import datetime
 from typing import Optional
 
 from config.settings import get_settings
 from config.logging_config import get_logger
+from core.mail import MailNotConfigured
+from core.mail import send as core_send
 
 logger = get_logger(__name__)
 
@@ -56,36 +57,24 @@ class EmailService:
         Returns:
             True if sent successfully, False otherwise
         """
-        if not self.api_key:
+        try:
+            core_send(
+                api_key=self.api_key,
+                from_email=self.from_email,
+                to=to_email,
+                subject=subject,
+                text=body_text,
+                html=body_html,
+            )
+            return True
+        except MailNotConfigured:
             logger.warning("Resend API key not configured - skipping email")
             return False
-
-        try:
-            # Handle both single email and list of emails
-            recipients = [to_email] if isinstance(to_email, str) else to_email
-
-            # Build email params
-            params = {
-                "from": self.from_email,
-                "to": recipients,
-                "subject": subject,
-                "text": body_text,
-            }
-
-            # Add HTML if provided
-            if body_html:
-                params["html"] = body_html
-
-            # Send via Resend
-            response = resend.Emails.send(params)
-
-            recipients_str = ', '.join(recipients)
-            logger.info(f"Email sent successfully to {recipients_str}: {subject} (id: {response.get('id', 'unknown')})")
-            return True
-
         except Exception as e:
-            recipients_str = ', '.join(recipients) if isinstance(to_email, list) else to_email
-            logger.error(f"Failed to send email to {recipients_str}: {e}", exc_info=True)
+            recipients = to_email if isinstance(to_email, str) else ", ".join(to_email)
+            # Deliberately swallowed: this is a daemon nobody is watching, and
+            # an unreachable mail server must not stop the email pipeline.
+            logger.error(f"Failed to send email to {recipients}: {e}", exc_info=True)
             return False
 
     def send_meeting_created_alert(
