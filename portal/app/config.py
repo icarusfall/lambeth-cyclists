@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,15 +14,15 @@ class Settings(BaseSettings):
     portal_users: str = ""  # "name:bcrypt-hash,name:bcrypt-hash"
 
     # Notion
-    notion_api_token: str = ""
-    notion_meetings_db: str = "2e42d7a24378803fb811d2f6ed029137"
-    notion_items_db: str = "2e32d7a2437880298c81f1af94c441a0"
-    notion_projects_db: str = "2e42d7a2437880d686e8ff554556b0c1"
+    notion_api_token: str = Field(default="", validation_alias=AliasChoices("NOTION_API_TOKEN", "NOTION_API_KEY"))
+    notion_meetings_db: str = Field(default="2e42d7a24378803fb811d2f6ed029137", validation_alias=AliasChoices("NOTION_MEETINGS_DB", "NOTION_MEETINGS_DB_ID"))
+    notion_items_db: str = Field(default="2e32d7a2437880298c81f1af94c441a0", validation_alias=AliasChoices("NOTION_ITEMS_DB", "NOTION_ITEMS_DB_ID"))
+    notion_projects_db: str = Field(default="2e42d7a2437880d686e8ff554556b0c1", validation_alias=AliasChoices("NOTION_PROJECTS_DB", "NOTION_PROJECTS_DB_ID"))
     notion_newsletters_db: str = ""
     notion_users_db: str = ""
 
     # AI
-    anthropic_api_key: str = ""
+    anthropic_api_key: str = Field(default="", validation_alias=AliasChoices("ANTHROPIC_API_KEY", "CLAUDE_API_KEY"))
 
     # Chat (CycleBot MCP server on Railway)
     mcp_server_url: str = "https://lambeth-cyclists-mcp-production.up.railway.app/mcp"

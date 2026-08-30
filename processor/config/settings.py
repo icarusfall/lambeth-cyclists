@@ -3,18 +3,28 @@ Configuration settings for Lambeth Cyclists Email Processor.
 Loads environment variables and provides validation.
 """
 
+import logging
 import os
 from pathlib import Path
 from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
+
+logger = logging.getLogger(__name__)
 
 
 _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
+    """Application settings loaded from environment variables.
+
+    Five values are named differently here and in the portal, because the two
+    grew up as separate repos: the Anthropic key, the Notion token and the
+    three database ids. Both spellings are accepted so one .env can serve
+    everything and the deployed variables can be tidied whenever convenient
+    rather than in one coordinated edit. The portal's names are canonical.
+    """
 
     # Gmail API Configuration
     gmail_client_id: str = Field(..., env="GMAIL_CLIENT_ID")
@@ -23,13 +33,13 @@ class Settings(BaseSettings):
     gmail_label: str = Field(default="Lambeth Cycling Projects", env="GMAIL_LABEL")
 
     # Claude API
-    claude_api_key: str = Field(..., env="CLAUDE_API_KEY")
+    claude_api_key: str = Field(..., validation_alias=AliasChoices("ANTHROPIC_API_KEY", "CLAUDE_API_KEY"))
 
     # Notion API
-    notion_api_key: str = Field(..., env="NOTION_API_KEY")
-    notion_items_db_id: str = Field(..., env="NOTION_ITEMS_DB_ID")
-    notion_projects_db_id: str = Field(..., env="NOTION_PROJECTS_DB_ID")
-    notion_meetings_db_id: str = Field(..., env="NOTION_MEETINGS_DB_ID")
+    notion_api_key: str = Field(..., validation_alias=AliasChoices("NOTION_API_TOKEN", "NOTION_API_KEY"))
+    notion_items_db_id: str = Field(..., validation_alias=AliasChoices("NOTION_ITEMS_DB", "NOTION_ITEMS_DB_ID"))
+    notion_projects_db_id: str = Field(..., validation_alias=AliasChoices("NOTION_PROJECTS_DB", "NOTION_PROJECTS_DB_ID"))
+    notion_meetings_db_id: str = Field(..., validation_alias=AliasChoices("NOTION_MEETINGS_DB", "NOTION_MEETINGS_DB_ID"))
 
     # Google Maps API (optional)
     google_maps_api_key: Optional[str] = Field(default=None, env="GOOGLE_MAPS_API_KEY")
@@ -127,10 +137,14 @@ def validate_settings() -> None:
         if missing:
             raise ValueError(f"Missing required configuration: {', '.join(missing)}")
 
-        print("✓ Configuration validated successfully")
+        logger.info("Configuration validated successfully")
 
     except Exception as e:
-        print(f"✗ Configuration validation failed: {e}")
+        # Plain ASCII and the logger, not print with tick marks: this runs at
+        # daemon startup, and a Windows console is cp1252 — the check marks
+        # raised UnicodeEncodeError and killed the process before it began,
+        # while masking whatever the real configuration problem was.
+        logger.error("Configuration validation failed: %s", e)
         raise
 
 
