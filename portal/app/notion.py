@@ -1,8 +1,8 @@
-"""Notion access layer.
+"""The portal's Notion access layer.
 
-Query/property-extraction patterns ported from lambeth-cyclists-mcp/server.py.
-Uses the notion-client v3 data_sources API: each database has a db_id, and a
-ds_id (data source) used for queries — discovered from the db_id and cached.
+Property extraction and data-source resolution live in core.notion, shared
+with the processor and the MCP server. What is left here is the portal's own
+queries and writes.
 """
 
 import json
@@ -13,6 +13,14 @@ from functools import lru_cache
 from notion_client import Client
 
 from app.config import get_settings
+from core.notion import (
+    DataSources,
+    extract_property_value,
+    get_date_prop,
+    get_page_title,
+    rich_text_to_str,
+    simplify_page,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,107 +36,18 @@ def client() -> Client:
     return Client(auth=get_settings().notion_api_token)
 
 
-_ds_cache: dict[str, str] = {}
+# One resolver for the whole process; database ids are stable.
+_data_sources = DataSources(client())
 
 
 def ds_id_for(db_id: str) -> str:
     """Resolve (and cache) the data-source id for a database id."""
-    if db_id not in _ds_cache:
-        db = client().databases.retrieve(database_id=db_id)
-        _ds_cache[db_id] = db["data_sources"][0]["id"]
-    return _ds_cache[db_id]
+    return _data_sources.id_for(db_id)
 
 
-# ---------------------------------------------------------------------------
-# Property extraction (ported from the MCP server)
-# ---------------------------------------------------------------------------
-
-
-def rich_text_to_str(rt_array) -> str:
-    return "".join(seg.get("plain_text", "") for seg in rt_array)
-
-
-def extract_property_value(prop):
-    """Return a human-readable value from a Notion property object."""
-    t = prop["type"]
-
-    if t == "title":
-        return rich_text_to_str(prop["title"])
-    if t == "rich_text":
-        return rich_text_to_str(prop["rich_text"])
-    if t == "number":
-        return str(prop["number"]) if prop["number"] is not None else None
-    if t == "select":
-        return prop["select"]["name"] if prop["select"] else None
-    if t == "multi_select":
-        return ", ".join(s["name"] for s in prop["multi_select"]) or None
-    if t == "date":
-        d = prop["date"]
-        if not d:
-            return None
-        start = d.get("start", "")
-        end = d.get("end")
-        return f"{start} to {end}" if end else start
-    if t == "checkbox":
-        return "Yes" if prop["checkbox"] else "No"
-    if t == "url":
-        return prop["url"]
-    if t == "email":
-        return prop["email"]
-    if t == "phone_number":
-        return prop["phone_number"]
-    if t == "people":
-        names = [p.get("name", "Unknown") for p in prop["people"]]
-        return ", ".join(names) if names else None
-    if t == "relation":
-        n = len(prop["relation"])
-        return f"({n} linked)" if n else None
-    if t == "formula":
-        f = prop["formula"]
-        return str(f.get(f["type"]))
-    if t == "status":
-        return prop["status"]["name"] if prop["status"] else None
-    if t == "created_time":
-        return prop["created_time"]
-    if t == "last_edited_time":
-        return prop["last_edited_time"]
-    return None
-
-
-def get_page_title(page) -> str:
-    for prop in page.get("properties", {}).values():
-        if prop["type"] == "title":
-            return rich_text_to_str(prop["title"]) or "Untitled"
-    return "Untitled"
-
-
-def get_date_prop(page, name: str) -> date | None:
-    """Return the start date of a date property as a date object, if set."""
-    prop = page.get("properties", {}).get(name)
-    if not prop or prop.get("type") != "date" or not prop.get("date"):
-        return None
-    start = prop["date"].get("start", "")
-    try:
-        return datetime.fromisoformat(start.replace("Z", "+00:00")).date()
-    except ValueError:
-        return None
-
-
-def simplify_page(page) -> dict:
-    """Flatten a Notion page into {id, title, url, props} for templates."""
-    props = {}
-    for name, prop in page.get("properties", {}).items():
-        if prop["type"] == "title":
-            continue
-        value = extract_property_value(prop)
-        if value is not None and str(value).strip():
-            props[name] = value
-    return {
-        "id": page["id"],
-        "title": get_page_title(page),
-        "url": page.get("url"),
-        "props": props,
-    }
+def data_source_parent(db_id: str) -> dict:
+    """Parent block for creating a page in a database."""
+    return _data_sources.parent(db_id)
 
 
 # ---------------------------------------------------------------------------

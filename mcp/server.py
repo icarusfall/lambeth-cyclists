@@ -14,6 +14,9 @@ import logging
 from mcp.server.fastmcp import FastMCP
 from notion_client import Client
 
+from core.notion import extract_property_value as core_extract
+from core.notion import get_page_title, rich_text_to_str, show_unknown_type
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -58,84 +61,14 @@ mcp = FastMCP(
 # ---------------------------------------------------------------------------
 
 
-def rich_text_to_str(rt_array):
-    """Convert a Notion rich-text array to a plain string."""
-    return "".join(seg.get("plain_text", "") for seg in rt_array)
-
-
 def extract_property_value(prop):
-    """Return a human-readable value from a Notion property object."""
-    t = prop["type"]
+    """A readable value for a Notion property.
 
-    if t == "title":
-        return rich_text_to_str(prop["title"])
-    if t == "rich_text":
-        return rich_text_to_str(prop["rich_text"])
-    if t == "number":
-        return str(prop["number"]) if prop["number"] is not None else None
-    if t == "select":
-        return prop["select"]["name"] if prop["select"] else None
-    if t == "multi_select":
-        return ", ".join(s["name"] for s in prop["multi_select"]) or None
-    if t == "date":
-        d = prop["date"]
-        if not d:
-            return None
-        start = d.get("start", "")
-        end = d.get("end")
-        return f"{start} to {end}" if end else start
-    if t == "checkbox":
-        return "Yes" if prop["checkbox"] else "No"
-    if t == "url":
-        return prop["url"]
-    if t == "email":
-        return prop["email"]
-    if t == "phone_number":
-        return prop["phone_number"]
-    if t == "people":
-        names = [p.get("name", "Unknown") for p in prop["people"]]
-        return ", ".join(names) if names else None
-    if t == "relation":
-        n = len(prop["relation"])
-        return f"({n} linked)" if n else None
-    if t == "formula":
-        f = prop["formula"]
-        return str(f.get(f["type"]))
-    if t == "rollup":
-        r = prop["rollup"]
-        rtype = r["type"]
-        if rtype == "array":
-            items = r.get("array", [])
-            if items:
-                return ", ".join(
-                    str(extract_property_value(i)) for i in items if i
-                )
-            return None
-        return str(r.get(rtype))
-    if t == "status":
-        return prop["status"]["name"] if prop["status"] else None
-    if t == "created_time":
-        return prop["created_time"]
-    if t == "last_edited_time":
-        return prop["last_edited_time"]
-    if t == "created_by":
-        return prop["created_by"].get("name", "Unknown")
-    if t == "last_edited_by":
-        return prop["last_edited_by"].get("name", "Unknown")
-    if t == "unique_id":
-        uid = prop["unique_id"]
-        prefix = uid.get("prefix", "")
-        number = uid.get("number", "")
-        return f"{prefix}-{number}" if prefix else str(number)
-    return f"[{t}]"
-
-
-def get_page_title(page):
-    """Extract the title property from a Notion page."""
-    for prop in page.get("properties", {}).values():
-        if prop["type"] == "title":
-            return rich_text_to_str(prop["title"]) or "Untitled"
-    return "Untitled"
+    Unhandled types surface as "[type]" rather than being dropped, so Claude
+    can see a field exists and say so instead of silently omitting it. The
+    portal wants the opposite — see core.notion.
+    """
+    return core_extract(prop, on_unknown=show_unknown_type)
 
 
 def format_properties(page):
