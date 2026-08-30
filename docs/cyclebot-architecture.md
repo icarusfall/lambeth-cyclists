@@ -1,102 +1,103 @@
-# CycleBot: Lambeth Cyclists AI Assistant
+# CycleBot: the Lambeth Cyclists assistant
 
-## Architecture Overview
+> Rewritten 30 August 2026. The previous version described CycleBot as an MCP
+> server with front ends hanging off it. That is no longer the shape: the agent
+> is a library, and MCP is one of the ways to reach it.
 
-A conversational AI interface that lets Lambeth Cyclists members query Notion databases (meeting agendas, action items, ward election data, and more) via natural language. Phase 1 is a Vercel-hosted web frontend; Phase 2 will add a WhatsApp bot as a second interface to the same backend.
+CycleBot answers questions about the group's Notion data — meetings, filed
+items, projects, ward and councillor research — in natural language. It is
+read-only by construction: there are no tools that write.
+
+## The shape
+
+The agent — the ten tools, the system prompt, the conversation loop — lives in
+[`core/cyclebot.py`](../core/cyclebot.py). Everything else is a way in.
 
 ```
-┌─────────────────────┐
-│   Vercel Frontend    │
-│   (Next.js 14)       │
-│                      │
-│  ?key=abc123 in URL  │
-│  Chat UI             │
-├──────────┬──────────┤
-           │ POST /api/chat
-           ▼
-┌─────────────────────┐
-│   Vercel API Route   │
-│   (Serverless Fn)    │
-│                      │
-│  - Validates API key │
-│  - Calls Anthropic   │
-│    Messages API      │
-│  - Streams response  │
-├──────────┬──────────┤
-           │ Anthropic Messages API
-           │ (with mcp_servers param)
-           │ (beta: mcp-client-2025-04-04)
-           ▼
-┌─────────────────────┐      ┌─────────────────────┐
-│   Anthropic API      │─────▶│   MCP Server         │
-│   (Claude Sonnet)    │◀─────│   (Railway)          │
-│                      │      │                      │
-│  Orchestrates tool   │      │  - FastMCP (Python)  │
-│  calls based on      │      │  - Streamable HTTP   │
-│  user's question     │      │  - notion-client v3  │
-└─────────────────────┘      │  - data_sources API  │
-                              │  - Read-only tools   │
-                              └──────────┬──────────┘
-                                         │
-                                         ▼
-                              ┌─────────────────────┐
-                              │   Notion Databases   │
-                              │   (data sources API) │
-                              │                      │
-                              │  - Meetings          │
-                              │  - Items             │
-                              │  - Wards             │
-                              │  - Councillors       │
-                              │  - Projects          │
-                              └─────────────────────┘
+                        ┌──────────────────────────┐
+  portal /chat ────────▶│                          │
+                        │      core.cyclebot       │
+  WhatsApp (later) ────▶│                          │──▶ Notion (data sources)
+                        │  10 read-only tools      │
+  MCP clients ─────────▶│  system prompt + loop    │
+  (via mcp/server.py)   └──────────────────────────┘
 ```
 
-## Live Deployment (Phase 1 — Complete)
+**Why a library and not a service.** MCP is a transport for clients you don't
+control. Until 30 August 2026 the portal's own chat page reached the tools like
+this:
 
-| Component | URL | Platform | Repo |
-|---|---|---|---|
-| **Frontend** | `cyclebot.vercel.app` | Vercel | `icarusfall/cyclebot` |
-| **MCP Server** | `lambeth-cyclists-mcp-production.up.railway.app/mcp` | Railway | `icarusfall/lambeth-cyclists-mcp` |
+```
+portal ─▶ Anthropic API ─▶ (public internet) ─▶ Railway MCP server ─▶ Notion
+```
 
-**Access links**: `https://cyclebot.vercel.app/?key=<key>`, one key per person.
+The Anthropic MCP connector means *Anthropic's* servers call the tools, not
+ours. So the MCP server had to be publicly reachable, which is why it needs a
+bearer key — and why, for six months, it was readable by anyone with the URL
+(see below). For a service that can already reach Notion directly, that is a
+long way round to call a function.
 
-The live keys are **not recorded here** — a doc in a git repo is the wrong place
-for working credentials, since they survive in history even after editing. Read
-or rotate them in the Vercel dashboard: `VALID_API_KEYS` (comma-separated). Two
-keys that were previously listed in this file should be treated as compromised
-and rotated.
+The portal now calls `cyclebot.answer()` in-process. Same tools, no round trip,
+no key, nothing publicly exposed.
 
-Note that a URL-embedded key is weak: it lands in browser history, in the
-`Referer` header of any outbound link, and in anything that logs URLs. The
-portal at members.lambethcyclists.com covers the same chat use case behind real named
-logins — see "Overlap with the portal" below.
+### The three ways in
 
-## Component Details
+| Way in | How | Auth |
+|---|---|---|
+| Portal `/chat` | `cyclebot.answer(history, surface=...)` in-process | the portal's login |
+| `mcp/server.py` | registers the same `TOOLS` with FastMCP | `MCP_API_KEY` bearer |
+| WhatsApp (later) | `cyclebot.answer(history, surface=...)` | Meta webhook signature |
 
-### 1. MCP Server (Railway)
+`core/tests/test_cyclebot.py` asserts the MCP server exposes exactly the
+registered tools, described identically. Add a tool to `core.cyclebot` and every
+way in gets it; add one to `mcp/server.py` instead and the test fails.
 
-**Tech**: Python 3.11+, `mcp[cli]` (FastMCP), `notion-client` v3, Streamable HTTP transport
+### `surface`
 
-**Notion API**: Uses the **data sources API** (`notion-client` v3). Each database has a `db_id` (the database itself) and a `ds_id` (the data source, which holds the schema and is used for queries). The `ds_id` is discovered automatically from the database's `data_sources` field.
+`answer()` takes a `surface` string appended to the shared system prompt. The
+shared part — who CycleBot is, look things up before answering, read-only, be
+honest about gaps — lives in `cyclebot.SYSTEM` and is the same everywhere. Only
+genuine differences go in `surface`.
 
-**Notion integration**: "CycleBot" — a dedicated integration (separate from the Email Processor). Must be connected to each database in Notion for access.
+The difference that will matter is **who can read the conversation**. The portal
+is behind a login, so its surface says the committee can discuss anything. A
+WhatsApp group can contain anyone who has been added, so it should not inherit
+"you may discuss everything in the databases". That is a decision for when the
+channel is built, not a default to drift into.
 
-**Tools exposed** (11 tools):
+## The tools
 
-| Tool | Description | Key Parameters |
-|------|-------------|----------------|
+Ten, all read-only. Docstrings are the interface: Claude reads them to decide
+when and how to call each one, so they carry valid parameter values and example
+queries. Registration refuses a tool with no docstring or an unhinted parameter.
+
+| Tool | Description | Key parameters |
+|---|---|---|
 | `search_all` | Full-text search across all Notion content | `query: str` |
-| `list_meetings` | List recent meetings sorted by date | `limit: int = 10` |
-| `get_meeting_agenda` | Get full agenda/minutes for a meeting | `date: str`, `title_search: str` |
-| `get_action_items` | Query items database | `status: str = "all"`, `assignee: str` |
-| `get_ward_data` | Ward election analysis | `ward_name: str` |
+| `list_meetings` | Recent meetings, most recent first | `limit: int = 10` |
+| `get_meeting_agenda` | Full agenda/minutes for one meeting | `date`, `title_search` |
+| `get_action_items` | Query the Items database | `status = "all"`, `assignee` |
+| `get_ward_data` | Ward election analysis | `ward_name` |
 | `get_councillor_data` | Councillor/candidate info | `ward_name`, `councillor_name`, `party` |
 | `get_battleground_wards` | Competitive wards (non-Safe-Labour + High priority) | (none) |
-| `get_projects` | Campaign projects | `status: str = "all"` |
+| `get_projects` | Campaign projects | `status = "all"` |
 | `get_page_detail` | Full page content by ID (drill-down) | `page_id: str` |
 | `list_databases` | All databases with property schemas | (none) |
 
-**Database IDs** (correct IDs — the `v=` param in Notion URLs is the view ID, not the database ID):
+Design decisions worth keeping:
+
+- **Return markdown**, not JSON. Claude synthesises prose from it.
+- **Errors come back as text**, not tracebacks — the model can say "Notion is
+  down" instead of the process dying.
+- **Unknown property types surface as `[type]`** rather than being dropped, so
+  Claude can see a field exists. The portal's own page rendering wants the
+  opposite; `core.notion.extract_property_value` keeps both via `on_unknown`.
+- **Generic property extraction**, so a new database works without code changes.
+
+### The databases
+
+The `v=` parameter in a Notion URL is the *view* ID, not the database ID. The
+database ID is the 32-char hex before `?v=`.
 
 | Database | db_id | ds_id |
 |---|---|---|
@@ -106,255 +107,144 @@ logins — see "Overlap with the portal" below.
 | Items | `2e32d7a2437880298c81f1af94c441a0` | `2e32d7a2-4378-80c7-ab8b-000b859cd636` |
 | Projects | `2e42d7a2437880d686e8ff554556b0c1` | `2e42d7a2-4378-80f3-bafd-000baf137869` |
 
-**Key design decisions**:
-- **Read-only**: No tools that create or modify Notion data. This is a query interface.
-- **Rich docstrings**: Each tool's docstring includes valid parameter values and example queries — this is what Claude reads to decide when/how to use the tool.
-- **Return markdown**: Format Notion data as readable markdown in tool responses — Claude synthesises it into natural answers.
-- **Error handling**: Return clear error messages rather than tracebacks.
-- **Generic property extraction**: `format_properties()` handles all Notion property types, so new databases work without code changes.
+Overridable per deployment via `NOTION_<KEY>_DB` / `NOTION_<KEY>_DS`.
 
-**Environment variables** (Railway):
-- `NOTION_API_TOKEN` — CycleBot integration token
-- `MCP_API_KEY` — bearer token(s), comma-separated. The portal and the Vercel
-  chat app currently hold different keys; both are listed here so either can
-  be rotated without breaking the other. **Required**: since 30 August 2026 the server
-  refuses to start over HTTP without it (`sys.exit` at startup), and rejects any
-  request whose `Authorization: Bearer` header does not match with a 401.
-  Enforced by `BearerAuthMiddleware`, an ASGI wrapper around
-  `mcp.streamable_http_app()` mounted in `__main__`, using `hmac.compare_digest`.
+Notion v3 addresses **data sources**, not databases: queries go to
+`data_sources.query()`. Every database has a `data_sources` array; `ds_id` is
+what you query and what holds the schema. A Notion integration must be
+explicitly connected to each database in the Notion UI — access to a page does
+not imply access to a database inside it.
 
-  Until that date this variable was documented and sent by callers but **never
-  read by `server.py`** — every database below was readable by anyone who knew
-  the Railway URL. Any client that talks to this server must now send the
-  matching value.
+## `mcp/server.py`
 
-- Database IDs are overridable per deployment via `NOTION_<KEY>_DB` /
-  `NOTION_<KEY>_DS` (e.g. `NOTION_MEETINGS_DB`), defaulting to the live Lambeth
-  IDs tabulated above.
-- `PORT` — set automatically by Railway
+A facade, ~130 lines. It registers `core.cyclebot.TOOLS` with FastMCP and wraps
+the app in bearer auth. Nothing internal depends on it any more.
 
-### Overlap with the portal
+It is kept because MCP is the only way a third-party client (Claude Desktop and
+the like) could reach CycleBot, and at this size that option is close to free.
+If you stop deploying it, the tools keep working everywhere else.
 
-`cyclebot.vercel.app` and the portal's `/chat` page are two front ends onto the
-same MCP server, with different auth models (URL key vs. named login) and
-different beta headers. That is two things to maintain and two things to explain
-to a new volunteer. The portal is the stronger candidate to keep: real accounts,
-self-service passwords, and the rest of the committee workflow around it.
+**`MCP_API_KEY` is required.** The server `sys.exit`s rather than start over
+HTTP without one, and `BearerAuthMiddleware` answers 401 to anything whose
+`Authorization: Bearer` header does not match (`hmac.compare_digest`, so the
+check does not leak how much of a key matched). Comma-separated, so each client
+can hold its own and any one can be rotated without breaking the others.
 
-### 2. Vercel Frontend
+Until 30 August 2026 this variable was documented and sent by callers but
+**never read by `server.py`** — every database above was readable by anyone who
+knew the Railway URL. Treat any key that predates that as compromised.
 
-**Tech**: Next.js 14 (App Router), React, Tailwind CSS, `@anthropic-ai/sdk`
+`python server.py stdio` needs no key: a local process pipe is its own trust
+boundary.
 
-**Auth**: API key passed as URL query parameter (`?key=abc123`). Validated server-side against `VALID_API_KEYS`. No cookies or sessions — stateless.
+## The Vercel front end — retired
 
-**API route** (`/api/chat`):
-- Receives: `{ messages: [...], key: "abc123" }`
-- Validates key against `VALID_API_KEYS`
-- Creates Anthropic client with beta header `mcp-client-2025-04-04`
-  (**drift**: the portal uses `mcp-client-2025-11-20`; the Vercel app should
-  be brought in line when it is next touched)
-- Calls `messages.stream()` with `mcp_servers` param pointing to Railway
-- Streams text deltas back to the frontend as a `ReadableStream`
-- `maxDuration = 60` (allows for MCP tool calls which take time)
+`cyclebot.vercel.app` (repo `icarusfall/cyclebot`, Next.js) was a second chat UI
+onto the same MCP server, with URL-key auth (`?key=…`, validated against
+`VALID_API_KEYS`). Confirmed 30 August 2026 as a proof of concept that was never
+adopted, and being retired: the portal's `/chat` page replaces it, with real
+accounts instead of a key in the URL.
 
-**UI**: Mobile-first chat interface with emerald green accent. Suggested starter questions on empty state. Lightweight markdown rendering (no library — inline regex).
+It duplicated the portal with a weaker auth model and had drifted — beta header
+`mcp-client-2025-04-04` against the portal's `mcp-client-2025-11-20`. A
+URL-embedded key lands in browser history, in the `Referer` of any outbound
+link, and in anything that logs URLs.
 
-**Environment variables** (Vercel):
-- `ANTHROPIC_API_KEY` — Anthropic API key
-- `VALID_API_KEYS` — comma-separated access keys
-- `MCP_SERVER_URL` — Railway MCP endpoint (`https://...railway.app/mcp`)
-- `MCP_API_KEY` — bearer token sent to the MCP server
+**It was the only consumer of the `mcp/` Railway service.** With it gone, that
+service has no callers and can stop being deployed. `mcp/server.py` stays in the
+repo regardless — see above.
 
-### 3. System Prompt
+To finish, all outside this repo:
 
-```
-You are CycleBot, the AI assistant for Lambeth Cyclists, a cycling
-advocacy group in Lambeth, South London.
+1. Delete the Vercel deployment and archive `icarusfall/cyclebot`
+2. Stop the `mcp` service on Railway (or leave it — it costs nothing idle)
+3. **Revoke the `MCP_API_KEY` value the Vercel app held.** Any key predating
+   30 August 2026 should be treated as compromised anyway, since the server
+   spent months not checking it.
 
-You help members find information from the group's records including
-meeting agendas and minutes, action items, and ward-level election
-analysis for the May 2026 Lambeth council elections.
+## WhatsApp: what it now takes
 
-Guidelines:
-- Use the available tools to look up information before answering.
-  Never guess or make up data.
-- If a query is ambiguous, search broadly first, then narrow down.
-- Keep answers concise and practical — members are busy people.
-- For ward/election queries, always clarify which election cycle
-  the data relates to.
-- If you can't find something, say so honestly and suggest what
-  the member might search for instead.
-- You have read-only access. If someone asks you to update or
-  create records, explain they'll need to do that in Notion directly.
-- Be friendly but not corporate. This is a community cycling group,
-  not a boardroom.
-```
+> Blocked on Meta business verification, which needs headed paper. That gates
+> the *channel*, not the agent — everything below can be built and tested
+> against the portal first.
 
----
+The old plan here was a fourth service (`cyclebot-whatsapp`, its own repo, its
+own Redis, its own copy of the Anthropic call logic) talking to the MCP server.
+That is the shape the August 2026 consolidation existed to undo. It is no longer
+what this needs.
 
-## Phase 2: WhatsApp Bot
+**WhatsApp is a route, not a service.** Meta's Cloud API posts webhooks to an
+HTTPS endpoint you own — so it can be a route in the portal, calling the same
+`cyclebot.answer()` the chat page calls. No new deployment, no second copy of
+the brain, no MCP hop, and "functionally identical to the website chat" holds by
+construction rather than by discipline.
 
-### Overview
+What genuinely remains to build:
 
-A WhatsApp bot that lets Lambeth Cyclists members query the same Notion data by messaging in a WhatsApp group or DM. Uses the same MCP server and Anthropic API — just a different input/output channel.
+1. **Webhook verification** — Meta sends a challenge on setup (`WHATSAPP_VERIFY_TOKEN`),
+   and signs each delivery. Verify the signature; the endpoint is public.
+2. **Conversation state.** This is the one real new piece. The portal's browser
+   sends the whole history each turn; WhatsApp delivers one message with no
+   context. Keyed by sender, last ~10 messages, ~30 min TTL. An in-process dict
+   is enough to start (state lost on redeploy, which for a chat bot is a
+   shrug); Redis is ~$5/month and only worth it if that becomes annoying —
+   which would more than double the running cost of the whole system.
+3. **A `surface` for WhatsApp** — see above. A group can contain non-committee
+   members; decide what CycleBot may discuss there.
+4. **Rate limiting** — per-sender and global. The cost risk is the Anthropic
+   bill, not WhatsApp.
+5. **Trigger rule** — respond to DMs always, and in groups only when mentioned
+   (`@CycleBot …`). Anything else is noise in a group chat.
+6. **Markdown → WhatsApp formatting** — see below.
 
-```
-Members message               Bot service handles          Same brain
-in WhatsApp                   webhook + API calls          as web chat
-     │                              │                          │
-     ▼                              ▼                          ▼
-┌──────────────┐  webhook   ┌───────────────────┐   ┌─────────────────┐
-│   WhatsApp   │ ──────────▶│  Bot Service       │──▶│  Anthropic API   │
-│   Cloud API  │ ◀──────────│  (Railway)         │   │  + MCP Server    │
-└──────────────┘  send msg  │                    │   │  (already built) │
-                            │  - Webhook receiver│   └─────────────────┘
-                            │  - Message router  │
-                            │  - Rate limiting   │
-                            │  - Conversation    │
-                            │    state (Redis)   │
-                            └───────────────────┘
-```
+Environment: `WHATSAPP_TOKEN`, `WHATSAPP_VERIFY_TOKEN`,
+`WHATSAPP_PHONE_NUMBER_ID`. `ANTHROPIC_API_KEY` and the Notion token are
+already in the portal.
 
-### How WhatsApp Cloud API Works
+### WhatsApp formatting
 
-WhatsApp Business Platform (Cloud API) is Meta's official API for building bots. Key concepts:
+Claude's markdown needs converting:
 
-1. **Meta Business Account** — you need one (free) at business.facebook.com
-2. **WhatsApp Business App** — register a phone number for the bot
-3. **Webhooks** — WhatsApp sends a POST to your server when a message arrives
-4. **Send API** — you POST back to WhatsApp to send replies
-5. **Access token** — a long-lived token for authenticating API calls
-
-### Architecture
-
-**Tech**: Python (FastAPI or Flask), deployed as a separate Railway service.
-
-**Trigger options** (choose one):
-- **Option A: Group mention** — bot responds when someone writes `@CycleBot <question>` in a group chat. Better for group use, avoids noise.
-- **Option B: Direct message** — bot responds to any DM to the CycleBot number. Simpler, good for 1:1 queries.
-- **Option C: Both** — respond to DMs always, respond in groups only when mentioned.
-
-Recommend starting with **Option C**.
-
-**Conversation state**: WhatsApp messages arrive one at a time (no conversation history in the webhook). The bot service needs to maintain conversation context:
-- Use **Redis** (Railway has a Redis plugin) or an in-memory dict with TTL
-- Key: WhatsApp user ID (phone number hash)
-- Value: last N messages (capped at ~10 to control token costs)
-- TTL: 30 minutes of inactivity, then reset
-
-**Rate limiting**: Prevent abuse and control costs:
-- Max 20 messages per user per hour
-- Max 100 total messages per hour across all users
-- Simple in-memory or Redis counter
-
-### Detailed Flow
-
-```
-1. User sends "What's the next meeting?" in WhatsApp group
-
-2. WhatsApp Cloud API sends webhook POST to:
-   https://cyclebot-whatsapp.up.railway.app/webhook
-   Body includes: sender number, message text, group ID
-
-3. Bot service:
-   a. Verifies webhook signature (security)
-   b. Checks if message mentions @CycleBot (in groups) or is a DM
-   c. Extracts message text
-   d. Loads conversation history from Redis for this user
-   e. Calls Anthropic Messages API with:
-      - Same system prompt as web chat
-      - Conversation history + new message
-      - Same mcp_servers config (Railway MCP server)
-   f. Receives Claude's response (with Notion data via MCP)
-   g. Saves updated conversation to Redis
-   h. Sends response back via WhatsApp Send API
-
-4. User sees the reply in WhatsApp
-```
-
-### WhatsApp-Specific Considerations
-
-**Message formatting**: WhatsApp supports limited formatting (bold, italic, monospace, lists). Claude's markdown output needs to be converted:
 - `**bold**` → `*bold*` (WhatsApp uses single asterisks)
-- `# Heading` → `*Heading*` (no heading support, use bold)
-- `` `code` `` → `` `code` `` (same)
-- Links: WhatsApp auto-links URLs, so just include the raw URL
-- Max message length: 4096 characters. Split longer responses.
+- `# Heading` → `*Heading*` (no headings)
+- `` `code` `` unchanged
+- Links: WhatsApp auto-links, so emit the raw URL
+- **4096 character limit** — split longer replies
 
-**Response time**: WhatsApp shows "typing" indicator. The bot should:
-1. Send a "read receipt" immediately (so the user knows it was received)
-2. Set "typing" status while waiting for Claude
-3. Send the response when ready
-4. If response takes >15s, send a "Let me look that up..." interim message
+### Response time
 
-**Phone number**: You'll need a dedicated phone number for the bot. Options:
-- Buy a cheap SIM (any carrier)
-- Use a virtual number service
-- Meta provides test numbers for development
+Send a read receipt immediately, set "typing" while waiting, and if the answer
+takes more than ~15s send an interim "Let me look that up…". Tool loops are not
+fast.
 
-### Implementation Plan
+### Prerequisites
 
-#### Prerequisites
-1. Create a Meta Business Account at business.facebook.com
-2. Set up a WhatsApp Business App in the Meta Developer Portal
-3. Register a phone number for the bot
-4. Get the WhatsApp Cloud API access token
-5. Set up Redis on Railway (one-click plugin)
+1. Meta Business Account (free) at business.facebook.com — **needs business
+   verification, which is what headed paper is for**
+2. A WhatsApp Business App in the Meta Developer Portal
+3. A dedicated phone number for the bot (cheap SIM, virtual number, or a Meta
+   test number for development)
+4. Cloud API access token
 
-#### Build Sequence
-1. **Scaffold the bot service** — FastAPI app with webhook endpoint
-2. **Implement webhook verification** — Meta sends a verification challenge on setup
-3. **Implement message handling** — parse incoming webhooks, extract text
-4. **Add conversation state** — Redis-backed message history per user
-5. **Connect to Anthropic API** — same pattern as the Vercel API route
-6. **Add WhatsApp message sending** — format and send responses
-7. **Add rate limiting** — per-user and global
-8. **Deploy to Railway** — new service in the same project
-9. **Configure webhook URL in Meta Developer Portal**
-10. **Test in a private group first**, then add to the main group
+### Cost
 
-#### Project Structure
-```
-cyclebot-whatsapp/
-├── app.py              # FastAPI app, webhook routes
-├── anthropic_client.py # Shared Anthropic API call logic
-├── whatsapp.py         # WhatsApp Cloud API client (send messages, formatting)
-├── conversation.py     # Redis-backed conversation state
-├── rate_limit.py       # Rate limiting
-├── requirements.txt
-├── Procfile
-└── .env.example
-```
+First 1,000 conversations/month are free, then roughly $0.005–0.08 each — a
+community group stays in the free tier. As a portal route it adds no hosting
+cost. Anthropic API stays pennies per query.
 
-#### Environment Variables
-- `WHATSAPP_TOKEN` — Cloud API access token
-- `WHATSAPP_VERIFY_TOKEN` — webhook verification secret (you choose this)
-- `WHATSAPP_PHONE_NUMBER_ID` — the bot's phone number ID
-- `ANTHROPIC_API_KEY` — same key as Vercel frontend
-- `MCP_SERVER_URL` — same Railway MCP endpoint
-- `MCP_API_KEY` — same bearer token
-- `REDIS_URL` — Railway Redis connection string
+## Notes from building this
 
-### Cost Estimate (Phase 2 additions)
-
-- **WhatsApp Cloud API**: First 1,000 conversations/month are free. After that, ~$0.005–0.08 per conversation depending on type. For a community group this will be free tier.
-- **Railway (bot service)**: Lightweight Python service, similar to MCP server. ~$0-2/month.
-- **Railway (Redis)**: ~$5/month for the smallest instance. Could use in-memory dict instead for $0 if you accept state loss on redeploy.
-- **Anthropic API**: Same as Phase 1 — pennies per query.
+- `notion-client` v3 uses `data_sources.query()`, not `databases.query()`.
+- Notion database IDs vs view IDs — see above.
+- A Notion integration must be connected to each database explicitly.
+- `FastMCP()` takes `host`/`port` as constructor parameters, not `mcp.run()` args.
+- The Anthropic `type: "url"` MCP config uses Streamable HTTP, not SSE.
+- The MCP connector's beta header changes; two clients on different versions is
+  a smell that they should not both exist.
+- FastMCP describes a tool with its raw `__doc__`, which is indented. Both
+  facades go through `cyclebot.describe()` so MCP clients and direct calls get
+  identical text.
 
 ---
 
-## Implementation Notes
-
-### Things learned during Phase 1 build
-
-- **Notion data sources API**: `notion-client` v3 uses `data_sources.query()` instead of `databases.query()`. Databases have a `data_sources` array — the `ds_id` is what you use for querying and schema retrieval.
-- **Notion database IDs vs view IDs**: The `v=` parameter in Notion URLs is a **view ID**, not the database ID. The database ID is the 32-char hex before `?v=`.
-- **Notion integration access**: A new Notion integration must be explicitly connected to each database (or parent page) in the Notion UI. Individual page access doesn't imply database access.
-- **MCP beta header**: The Anthropic API's `mcp_servers` parameter requires the beta header `anthropic-beta: mcp-client-2025-04-04`. Set via `defaultHeaders` in the SDK.
-- **FastMCP host/port**: `host` and `port` are constructor parameters on `FastMCP()`, not arguments to `mcp.run()`.
-- **Streamable HTTP transport**: The Anthropic API `type: "url"` MCP server config uses Streamable HTTP (not SSE). Use `mcp.run(transport="streamable-http")`.
-
----
-
-*Architecture doc for CycleBot. Charlie / Lambeth Cyclists. March 2026.*
+*Architecture doc for CycleBot. Charlie / Lambeth Cyclists. Rewritten August 2026.*

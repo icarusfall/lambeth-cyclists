@@ -1,6 +1,13 @@
 # Getting Started - Testing the Email Processor
 
-This guide will help you set up and test the Lambeth Cyclists Email Processor locally on your Windows machine.
+> Updated 30 August 2026 for the merged repo. The processor used to be its own
+> repo, `lambeth-cyclists-claude`; it is now `processor/` inside
+> `lambeth-cyclists`, sharing one virtualenv and one `requirements.txt` with
+> the portal and the MCP server. Paths below reflect that.
+
+This guide will help you set up and test the Lambeth Cyclists Email Processor
+locally on your Windows machine. For the portal and the MCP server, see the
+top-level [README](../README.md).
 
 ## 🎯 What's Working Now
 
@@ -16,12 +23,11 @@ The **core email processing pipeline** is complete and ready to test:
 - ✅ Duplicate detection (won't process the same email twice)
 - ✅ Relationship detection (links related items and projects)
 
-**What's not yet implemented:**
-- Meeting agenda generation (Phase 8)
-- Health monitoring and notifications (Phase 9)
-- Data migration from your existing table (Phase 10)
+Also working, and listed here as unbuilt when this guide was first written:
 
-But the main email processing functionality is fully working!
+- Meeting agenda generation - see `agenda/`
+- Email reminders and error alerts - see [EMAIL_ALERTS_SETUP.md](EMAIL_ALERTS_SETUP.md),
+  which is Resend, not SMTP
 
 ---
 
@@ -31,10 +37,13 @@ Work through these steps in order:
 
 ### Step 1: Install Python Dependencies
 
+One virtualenv and one `requirements.txt` serve all three services, so this is
+done once at the repo root - not per service.
+
 1. Open PowerShell or Command Prompt
-2. Navigate to the project directory:
+2. Navigate to the repo root:
    ```bash
-   cd C:\Users\charl\ClaudeProjects\lambeth-cyclists-claude
+   cd C:\Users\charl\ClaudeProjects\lambeth-cyclists
    ```
 
 3. Create a virtual environment:
@@ -52,7 +61,9 @@ Work through these steps in order:
    ```bash
    pip install -r requirements.txt
    ```
-   This will take 2-3 minutes.
+   This will take 2-3 minutes. It installs everything for all three services,
+   plus the shared `core` package in editable mode - which is what lets each
+   service `import core.*` while running from its own directory.
 
 ### Step 2: Set Up Notion Databases
 
@@ -98,7 +109,8 @@ Follow the **OAUTH_SETUP_GUIDE.md** to:
 
 ### Step 5: Create .env File
 
-1. In the project root, create a file named `.env` (note the dot at the start)
+1. In `processor/`, create a file named `.env` (note the dot at the start).
+   Each service has its own - copy the `.env.example` beside it.
 
 2. Copy this template and fill in your values:
 
@@ -145,7 +157,7 @@ NOTION_RPM=3
 Run this test to make sure everything is configured correctly:
 
 ```bash
-python -c "from config.settings import validate_settings; validate_settings()"
+cd processor && python scripts/check_config.py
 ```
 
 You should see:

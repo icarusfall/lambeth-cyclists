@@ -1,297 +1,111 @@
-# Email Alerts Setup Guide
+# Email alerts setup
 
-This guide will help you set up email alerts and reminders for the Lambeth Cyclists Email Processor.
+> Rewritten 30 August 2026. This guide previously described Gmail SMTP with an
+> app password. **Sending is Resend.** There is no SMTP anywhere in the code —
+> `SMTP_HOST`, `SMTP_USERNAME` and friends do nothing if you set them.
 
-## Why Email Alerts?
+The processor emails you about meeting admin and about its own failures. Both
+go through Resend, as does everything the portal sends; the shared code is
+[`core/mail.py`](../core/mail.py).
 
-The system will send you email notifications for:
+## What you'll get
 
-### Meeting Reminders
-- **When agenda is generated** (2 days before meeting) - with agenda preview
-- **Daily reminders** if agenda not approved (during week before meeting)
-- **Meeting tomorrow** reminder (day before) - with Zoom link and location
-- **Add minutes** reminder (day after meeting)
+### Meeting reminders
 
-### Error Alerts
-- When email processing fails
-- When the system hasn't processed emails in 7+ days (might be down)
-- Critical configuration errors
+| When | Subject | Contains |
+|---|---|---|
+| Agenda generated (2 days before) | `Agenda Generated: …` | meeting details, days to go, agenda preview, Notion link |
+| Every day until approved | `⚠️ URGENT: Agenda Needs Approval: …` | days to go, Notion link — **daily until you mark it approved** |
+| Day before | `Meeting Tomorrow: …` | date, time, format, location, Zoom link |
+| Day after | `Please Add Minutes: …` | checklist: notes, decisions, action items, next date |
 
-This is especially useful since you mentioned needing to be "relentlessly nagged" about meeting admin!
+### Error alerts
 
----
+Subject `⚠️ Error in Email Processor: …`, with what went wrong and a nudge to
+check the Railway logs. Sent when processing fails, when nothing has been
+processed for 7+ days (the pipeline may be down), and on critical config errors.
 
-## Setup Steps
+This matters more than it looks. When an analysis fails the processor logs the
+error and files the email anyway with placeholder text — losing the email would
+be worse — so **a broken pipeline looks like a quiet one**. These alerts and the
+portal dashboard are the only things that say otherwise.
 
-### Step 1: Create Gmail App Password
+## Setup
 
-Gmail no longer accepts regular passwords for third-party apps. You need to create an **App Password**.
+### Step 1: Get a Resend API key
 
-**Prerequisites:**
-- You must have 2-Step Verification enabled on your Google account
-- If you don't have 2FA enabled, set it up first at: https://myaccount.google.com/security
+1. Sign in at <https://resend.com>
+2. Go to <https://resend.com/api-keys> and create a key (starts `re_`)
+3. Copy it — you only see it once
 
-**Create App Password:**
+**Sending domain.** To send as `@lambethcyclists.com` the domain must be
+verified in Resend (<https://resend.com/domains>, then add the DNS records —
+ours are on Vercel, see the README). Until then use Resend's test address
+`onboarding@resend.dev`, which sends only to the account owner's address.
 
-1. Go to your Google Account: https://myaccount.google.com/
-
-2. Click "Security" in the left sidebar
-
-3. Under "How you sign in to Google", click "2-Step Verification"
-   - If you don't see this, you need to enable 2FA first
-
-4. Scroll down to the bottom and click "App passwords"
-
-5. You may need to sign in again
-
-6. In the "Select app" dropdown, choose **"Mail"**
-
-7. In the "Select device" dropdown, choose **"Other (Custom name)"**
-
-8. Type: **"Lambeth Cyclists Email Processor"**
-
-9. Click "Generate"
-
-10. Google will show you a 16-character password like: `abcd efgh ijkl mnop`
-
-11. **Copy this password immediately!** You won't be able to see it again.
-
----
-
-### Step 2: Add to .env File
-
-Add these lines to your `.env` file:
+### Step 2: Add to `processor/.env`
 
 ```bash
-# Email Alerts Configuration
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=your-email@gmail.com
-SMTP_PASSWORD=abcdefghijklmnop  # The 16-character app password (no spaces!)
-ALERT_EMAIL=your-email@gmail.com  # Can be the same email
+RESEND_API_KEY=re_your_key_here
+FROM_EMAIL=Lambeth Cyclists <onboarding@resend.dev>
+# Single address, or comma-separated for several
+ALERT_EMAIL=your-email@gmail.com
 ```
 
-**Important:**
-- For `SMTP_PASSWORD`, remove all spaces from the app password
-- `SMTP_USERNAME` is your full Gmail address
-- `ALERT_EMAIL` is where you want to receive the alerts (can be the same or different)
+`FROM_EMAIL` takes a full `Name <address>` string. `ALERT_EMAIL` falls back to
+`ADMIN_EMAIL` if unset.
 
----
+If `RESEND_API_KEY` is missing the processor still runs — it just cannot send.
+That is deliberate: alerts failing should not stop email being filed.
 
-### Step 3: Test Email Alerts
+On Railway, set the same three as service variables rather than committing them.
 
-Let's verify it's working:
+### Step 3: Send a test
 
-1. Use the bundled `scripts/check_email_alerts.py`:
-
-```python
-from services.email_service import EmailService
-
-email_service = EmailService()
-
-# Send test email
-success = email_service.send_email(
-    to_email="your-email@gmail.com",  # Your email
-    subject="Test: Email Alerts Working!",
-    body_text="This is a test email from Lambeth Cyclists Email Processor. If you received this, email alerts are configured correctly!"
-)
-
-if success:
-    print("✓ Test email sent successfully! Check your inbox.")
-else:
-    print("✗ Failed to send email. Check the logs for errors.")
-```
-
-2. Run it:
 ```bash
-python scripts/check_email_alerts.py
+cd processor && python scripts/check_email_alerts.py
 ```
 
-3. Check your inbox - you should receive the test email within a few seconds
-
----
-
-## What You'll Receive
-
-### When Agenda is Generated
-
-**Subject:** `Agenda Generated: Committee Meeting - February 2026`
-
-**Content:**
-- Meeting details (date, time, format, location)
-- Days until meeting
-- Preview of the generated agenda
-- Link to review in Notion
-- Reminder to approve the agenda
-
-### Daily Nag (if Agenda Not Approved)
-
-**Subject:** `⚠️ URGENT: Agenda Needs Approval: Committee Meeting`
-
-**Content:**
-- Days until meeting (getting more urgent!)
-- Reminder that agenda needs approval
-- Link to Notion
-- You'll get this **every day** until you mark it as "approved" in Notion
-
-### Meeting Tomorrow Reminder
-
-**Subject:** `Meeting Tomorrow: Committee Meeting - February 2026`
-
-**Content:**
-- Meeting date and time
-- Format (Hybrid/In-person/Online)
-- Location
-- Zoom link (if hybrid/online)
-- Link to Notion for agenda
-
-### After Meeting Reminder
-
-**Subject:** `Please Add Minutes: Committee Meeting - February 2026`
-
-**Content:**
-- Reminder to add meeting notes
-- Link to Notion
-- Checklist: notes, decisions, action items, next meeting date
-
-### Error Alerts
-
-**Subject:** `⚠️ Error in Email Processor: [Error Type]`
-
-**Content:**
-- What went wrong
-- Error message
-- Reminder to check Railway logs
-
----
+It sends one message to `ALERT_EMAIL` and prints whether Resend accepted it.
+This hits the live API — see [`scripts/README.md`](../processor/scripts/README.md).
 
 ## Troubleshooting
 
-### Error: "SMTP authentication failed"
+**`MailNotConfigured`** — `RESEND_API_KEY` is empty or absent. Distinct on
+purpose from a send that was attempted and failed, so "not set up" never looks
+like "broken".
 
-**Check:**
-- App password is correct (no spaces, 16 characters)
-- 2-Step Verification is enabled on your Google account
-- You're using the app password, not your regular Gmail password
+**401 / "API key is invalid"** — the key is wrong or was revoked. Check
+<https://resend.com/api-keys>.
 
-**Fix:**
-- Delete the app password and create a new one
-- Make sure you copied it correctly (no spaces)
+**403 / "domain is not verified"** — `FROM_EMAIL` uses a domain Resend hasn't
+verified. Either verify it, or fall back to `onboarding@resend.dev`.
 
-### Error: "Connection refused" or "Timed out"
+**Accepted but nothing arrives** — with `onboarding@resend.dev` you can only
+send to the Resend account owner's address. Check spam, then the Resend
+dashboard, which logs every send and its delivery state.
 
-**Check:**
-- `SMTP_HOST` is `smtp.gmail.com` (not `smtp.google.com`)
-- `SMTP_PORT` is `587` (not 465 or 25)
-- Your network allows outbound connections on port 587
+**Too many reminders** — the daily nag is doing its job. Mark the agenda
+approved in Notion and it stops.
 
-### Not Receiving Emails
+**Nothing at all, no errors** — check the processor is actually running
+(`main.py`, meeting loop every 3600s) and that `ALERT_EMAIL` is set.
 
-**Check:**
-- Check your spam/junk folder
-- Verify `ALERT_EMAIL` is correct in `.env`
-- Run the test script to see if there are errors
+## Testing the whole flow
 
-### Receiving Too Many Reminders
+1. Create a meeting in Notion 2 days out — title, date, format `Hybrid`,
+   "Meeting Created Manually" ticked
+2. Run `python main.py` in `processor/`
+3. Wait for the meeting loop (hourly): you should get the agenda email
+4. Don't approve it — the daily nag starts
+5. Approve it in Notion — the nags stop
 
-**To stop daily nags:**
-- Go to the Meeting in Notion
-- Change "Agenda Generation Status" from "generated" to "approved"
-- The daily reminders will stop
+## Security
 
-**To disable all email alerts:**
-- Remove `SMTP_USERNAME` and `SMTP_PASSWORD` from `.env`
-- The system will continue working but won't send emails
-
----
-
-## Using a Different Email Service
-
-While Gmail is recommended, you can use other SMTP services:
-
-### Outlook/Hotmail
-
-```bash
-SMTP_HOST=smtp-mail.outlook.com
-SMTP_PORT=587
-SMTP_USERNAME=your-email@outlook.com
-SMTP_PASSWORD=your-password
-```
-
-### Custom SMTP Server
-
-```bash
-SMTP_HOST=mail.yourdomain.com
-SMTP_PORT=587
-SMTP_USERNAME=noreply@yourdomain.com
-SMTP_PASSWORD=your-smtp-password
-```
-
----
-
-## Privacy & Security
-
-**Your credentials are safe:**
-- App passwords are stored only in your `.env` file
-- `.env` is in `.gitignore` and never committed to GitHub
+- Keys live in `.env`, which is gitignored (all three services' `.env` files are)
 - Railway encrypts environment variables
-- App passwords can be revoked anytime at: https://myaccount.google.com/apppasswords
+- Revoke a key at <https://resend.com/api-keys>; it takes effect immediately
+- Don't paste keys into docs — they survive in git history after editing
 
-**Best practices:**
-- Use a dedicated Gmail account if you prefer (not your personal one)
-- Revoke app passwords you're not using
-- Don't share your `.env` file with anyone
-
----
-
-## Optional: Daily Digest
-
-If you want a daily summary instead of individual emails, you can modify the reminder settings in `config/settings.py` (future feature).
-
----
-
-## Testing the Full Flow
-
-Once set up, you can test the meeting reminder system:
-
-1. Create a test meeting in Notion:
-   - Title: "Test Committee Meeting"
-   - Date: 2 days from now
-   - Format: "Hybrid"
-   - Meeting Created Manually: ✓
-
-2. Run `python main.py`
-
-3. Wait for the meeting agenda loop to run (every hour by default)
-
-4. You should receive an email when the agenda is generated
-
-5. Don't approve the agenda in Notion
-
-6. Wait 24 hours - you should receive a daily nag reminder!
-
-7. Approve the agenda in Notion - the daily nags will stop
-
----
-
-## Summary
-
-Once configured, you'll never miss meeting admin tasks:
-
-- ✅ Agenda generated automatically (2 days before)
-- ✅ Email notification with agenda preview
-- ✅ Daily nags if you forget to approve it
-- ✅ Final reminder the day before
-- ✅ Reminder to add minutes afterwards
-- ✅ Error alerts if something breaks
-
-**You mentioned needing to be "relentlessly nagged" - this system delivers!** 😄
-
----
-
-## Next Steps
-
-After email alerts are working:
-1. Test with a real meeting in Notion
-2. Deploy to Railway (so it runs 24/7)
-3. Enjoy automated meeting management!
+Every service currently authenticates as Charlie, including this one. That is
+the system's biggest weak point, recorded in [CLAUDE.md](../CLAUDE.md).

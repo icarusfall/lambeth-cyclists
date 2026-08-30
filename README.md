@@ -19,14 +19,15 @@ get them out to members.
 
 ## Services
 
-Two deployments, both on Railway, both from this repo.
+Two deployments, both on Railway, both from this repo. `mcp/` is a third
+service that no longer has callers - see below.
 
 | Directory | What it is | Runs as |
 |---|---|---|
 | `processor/` | Watches Gmail for labelled mail, reads it with Claude (text and vision), files structured items into Notion, generates meeting agendas, sends reminders. | worker, 24/7 |
 | `portal/` | The members' site at members.lambethcyclists.com. The board, triage, adding items by hand, the newsletter builder, chat. | web |
-| `mcp/` | CycleBot: read-only Notion tools over MCP, used by the portal's chat. Being folded into the portal. | web (for now) |
-| `core/` | Shared by all three: how we call Claude, how we read Notion, how we send mail. | library |
+| `mcp/` | CycleBot over MCP, for MCP clients. A thin facade over `core/cyclebot.py`. | not deployed |
+| `core/` | Shared by all three: how we call Claude, read Notion, send mail, and answer questions. | library |
 
 Notion is the only datastore. There is no database of our own.
 
@@ -62,7 +63,7 @@ Each service runs from its own directory, which is also how Railway starts them:
 ```bash
 cd processor && python main.py                                   # the daemon
 cd portal    && uvicorn app.main:app --reload                    # the website
-cd mcp       && python server.py                                 # the MCP server
+cd mcp       && python server.py                                 # only for MCP clients
 ```
 
 Each has its own `.env` — copy the `.env.example` beside it. Tests:
@@ -84,6 +85,10 @@ pytest
   ends, and reject stub output.
 - **Notion is v3 throughout**: queries go to `data_sources.query()`, and pages
   are parented to a data source, not a database.
+- **The agent is a library, not a service.** CycleBot's tools, prompt and loop
+  live in `core/cyclebot.py`. The portal's chat calls it in-process; `mcp/`
+  exposes the same tools to MCP clients; a WhatsApp bot would call the same
+  function. Add a tool there and every way in gets it — a test enforces that.
 
 ## Where things came from
 

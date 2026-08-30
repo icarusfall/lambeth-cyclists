@@ -16,33 +16,25 @@ This guide will help you deploy the Lambeth Cyclists Email Processor to Railway 
 
 ---
 
+> Updated 30 August 2026. This guide described deploying one repo as one
+> service. It is now **one repo, several services**: `processor/` (worker),
+> `portal/` (web), and `mcp/` (web, only while the Vercel CycleBot front end
+> still needs it). Each is a separate Railway service pointed at a different
+> **Root Directory** in the same repo.
+
 ## Step 1: Prepare Your Repository
 
-### 1.1 Initialize Git (if not already done)
+The repository already exists and is already pushed - this section is kept for
+setting up a fresh environment.
 
 ```bash
-git init
-git add .
-git commit -m "Initial commit - Lambeth Cyclists Email Processor"
+git remote -v      # should show icarusfall/lambeth-cyclists
+git push origin main
 ```
 
-### 1.2 Create GitHub Repository
-
-1. Go to https://github.com/new
-2. Repository name: `lambeth-cyclists-email-processor` (or your preferred name)
-3. Set to **Private** (contains sensitive configuration)
-4. Click "Create repository"
-
-### 1.3 Push to GitHub
-
-```bash
-# Replace with your GitHub username
-git remote add origin https://github.com/YOUR-USERNAME/lambeth-cyclists-email-processor.git
-git branch -M main
-git push -u origin main
-```
-
-**IMPORTANT:** Make sure `.env` is in `.gitignore` (it already is) so you don't push secrets!
+**IMPORTANT:** every service's `.env` is gitignored (the pattern matches at any
+depth, so `processor/.env`, `portal/.env` and `mcp/.env` are all covered).
+Verify with `git check-ignore -v processor/.env` before pushing.
 
 ---
 
@@ -54,20 +46,43 @@ git push -u origin main
 2. Sign up with your GitHub account (easiest method)
 3. Verify your email
 
-### 2.2 Create New Project
+### 2.2 Create the Project and its Services
 
 1. Click "New Project"
 2. Select "Deploy from GitHub repo"
 3. Connect your GitHub account if prompted
-4. Select your `lambeth-cyclists-email-processor` repository
+4. Select the `lambeth-cyclists` repository
 5. Railway will detect it's a Python project
 
-### 2.3 Configure Build Settings
+Then add **one service per directory**, in the same project so they can share
+variables. This is the part the old version of this guide got wrong: with three
+apps in one repo, Railway needs to be told which one each service is.
 
-Railway should automatically detect the `railway.json` configuration, which specifies:
-- Build command: `pip install -r requirements.txt`
-- Start command: `python main.py`
-- Restart policy: On failure (max 10 retries)
+### 2.3 Configure Each Service
+
+There is **no `railway.json`** in this repo - set these in each service's
+Settings tab by hand:
+
+| Service | Root Directory | Start Command | Type |
+|---|---|---|---|
+| processor | `processor` | `python main.py` | worker (no domain) |
+| portal | `portal` | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` | web |
+| mcp | `mcp` | `python server.py` | web |
+
+Build command is `pip install -r requirements.txt` for all of them. That file
+is at the **repo root**, not in the service directories: one dependency set for
+everything, which is what stopped the processor sitting a major version behind
+on `notion-client`. It also installs the shared `core` package in editable
+mode, which is how each service imports `core.*` while running from its own
+directory.
+
+Restart policy: on failure, max 10 retries.
+
+**`mcp` no longer needs deploying.** Since 30 August 2026 the portal's chat
+runs CycleBot's tools in-process via `core.cyclebot`, and the only other
+consumer - the Vercel front end at `cyclebot.vercel.app` - is being retired.
+Deploy this service only if you want CycleBot reachable by a third-party MCP
+client. See [cyclebot-architecture.md](cyclebot-architecture.md).
 
 ---
 
@@ -202,7 +217,7 @@ Railway doesn't need a domain for this background service, but if you want to ad
 
 ### 6.2 Configure Restart Policy
 
-Already set in `railway.json`:
+Set per service in Settings (there is no `railway.json`):
 - Restart on failure: Yes
 - Max retries: 10
 - This ensures the app recovers from temporary errors
@@ -255,7 +270,8 @@ Phase 9 will add:
 
 **Fix:**
 - Check build logs for specific error
-- Ensure `railway.json` is valid JSON
+- Check the service's **Root Directory** is set (`processor`, `portal` or
+  `mcp`). Unset, Railway builds the repo root and starts the wrong thing.
 
 ### App Starts But Crashes
 
