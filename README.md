@@ -1,6 +1,6 @@
 # Lambeth Cyclists
 
-Tooling for [Lambeth Cyclists](https://lambethcyclists.com), the Lambeth branch
+Tooling for [Lambeth Cyclists](https://lambethcyclists.org.uk), the Lambeth branch
 of the London Cycling Campaign — a volunteer cycling advocacy group in South
 London.
 
@@ -24,10 +24,27 @@ Two deployments, both on Railway, both from this repo.
 | Directory | What it is | Runs as |
 |---|---|---|
 | `processor/` | Watches Gmail for labelled mail, reads it with Claude (text and vision), files structured items into Notion, generates meeting agendas, sends reminders. | worker, 24/7 |
-| `portal/` | The members' site at lambethcyclists.com. The board, triage, adding items by hand, the newsletter builder, chat. | web |
+| `portal/` | The members' site at members.lambethcyclists.com. The board, triage, adding items by hand, the newsletter builder, chat. | web |
 | `mcp/` | CycleBot: read-only Notion tools over MCP, used by the portal's chat. Being folded into the portal. | web (for now) |
 
 Notion is the only datastore. There is no database of our own.
+
+### Domains
+
+| Host | Serves |
+|---|---|
+| `lambethcyclists.org.uk` | the public site (WordPress, maintained separately) |
+| `members.lambethcyclists.com` | this portal |
+| `lambethcyclists.com` | redirects to the public site |
+
+The bare domain and the members' subdomain both point at the same Railway
+service; `redirect_front_door` in `portal/app/main.py` tells them apart on the
+Host header, so the redirect needs no deployment of its own. A login wall on
+the bare domain would be the wrong front door for anyone who has just heard of
+the group.
+
+DNS is on Vercel (left over from an earlier project) while the registration is
+with Name.com — so records are edited in Vercel, and renewal is at Name.com.
 
 ## Running it
 

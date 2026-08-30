@@ -24,7 +24,7 @@ undocumented context.
 |---|---|---|---|
 | `lambeth-cyclists-claude` | Email processor. Watches Gmail, extracts structured data with Claude, files it into Notion, generates meeting agendas, sends reminders. | Railway (worker) | Autonomous daemon, 24/7 |
 | `lambeth-cyclists-mcp` | "CycleBot" MCP server. Read-only Notion tools exposed over MCP. | Railway (web) | Called by the portal's chat, and by Claude clients |
-| `lambeth-cyclists-portal` | Members' portal at **lambethcyclists.com**. Dashboard, newsletter builder, archive, chat. | Railway (web) | On-demand only — every AI call is a button press |
+| `lambeth-cyclists-portal` | Members' portal at **members.lambethcyclists.com**. Dashboard, newsletter builder, archive, chat. | Railway (web) | On-demand only — every AI call is a button press |
 
 They share one Notion workspace. Nothing else is shared: no common library, no
 common config format. Keeping conventions aligned by hand is a known cost.
@@ -187,4 +187,4 @@ Ordered roughly by how much pain they cause:
 - Claude Console: https://console.anthropic.com/
 - Notion integrations: https://www.notion.so/my-integrations
 - LCC: https://lcc.org.uk/
-- Portal: https://lambethcyclists.com
+- Portal: https://members.lambethcyclists.com

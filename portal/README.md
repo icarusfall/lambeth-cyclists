@@ -1,6 +1,6 @@
 # Lambeth Cyclists Portal
 
-Phone-friendly, login-protected portal at **lambethcyclists.com** that makes
+Phone-friendly, login-protected portal at **members.lambethcyclists.com** that makes
 producing the monthly Lambeth Cyclists newsletter nearly effortless.
 
 - **Dashboard** — next committee meeting, a warning banner when no future

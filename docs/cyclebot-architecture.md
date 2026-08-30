@@ -68,7 +68,7 @@ and rotated.
 
 Note that a URL-embedded key is weak: it lands in browser history, in the
 `Referer` header of any outbound link, and in anything that logs URLs. The
-portal at lambethcyclists.com covers the same chat use case behind real named
+portal at members.lambethcyclists.com covers the same chat use case behind real named
 logins — see "Overlap with the portal" below.
 
 ## Component Details
