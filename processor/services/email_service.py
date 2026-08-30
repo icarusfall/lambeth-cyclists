@@ -25,9 +25,12 @@ class EmailService:
         self.api_key = getattr(self.settings, 'resend_api_key', None)
         self.from_email = getattr(self.settings, 'from_email', 'Lambeth Cyclists <onboarding@resend.dev>')
 
-        # Configure Resend
-        if self.api_key:
-            resend.api_key = self.api_key
+        # No Resend configuration here: core.mail.send() sets the api key per
+        # call from the one it is passed. This used to say
+        # `resend.api_key = self.api_key`, which was left behind when the
+        # sending moved to core.mail and `import resend` went with it — so
+        # constructing this raised NameError whenever RESEND_API_KEY was set,
+        # which is every deployment that can actually send.
 
         # Alert email(s) - can be single email or comma-separated list
         alert_email_raw = getattr(self.settings, 'alert_email', self.settings.admin_email)
