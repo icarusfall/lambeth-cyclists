@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}The board — Lambeth Cyclists{% endblock %}
+{% block content %}
+<h1>Hello {{ user|capitalize }}</h1>
+{% if unclaimed or mine %}
+<p class="muted lede">
+  {%- if unclaimed %}{{ unclaimed|length }} thing{{ 's' if unclaimed|length != 1 }} here need{{ 's' if unclaimed|length == 1 }} someone{% endif -%}
+  {%- if unclaimed and mine %}, and you&rsquo;re on {{ mine|length }}{% endif -%}
+  {%- if mine and not unclaimed %}You&rsquo;re on {{ mine|length }} thing{{ 's' if mine|length != 1 }}{% endif -%}.
+</p>
+{% endif %}
+
+{% if error %}<p class="flash err">{{ error }}</p>{% endif %}
+
+{% if health %}{% include "partials/_pipeline_health.html" %}{% endif %}
+{% if request.query_params.get('added') %}
+<p class="flash ok big">Added to the tracker. It&rsquo;s on the list now.</p>
+{% endif %}
+
+{% if no_future_meeting %}
+<div class="banner warn">
+  <strong>No future meeting is in the diary.</strong>
+  Until there is one, there is no agenda to build and nothing to invite people to.
+</div>
+{% endif %}
+
+{# ---------------- Needs someone ---------------- #}
+<section>
+  <div class="section-head">
+    <h2>Needs someone</h2>
+    <span class="btnrow">
+      <a class="btn ghost small-btn" href="/triage">Sort the inbox</a>
+      <a class="btn ghost small-btn" href="/items/new">+ Add something to watch</a>
+    </span>
+  </div>
+
+  {% if board_error %}
+    <p class="flash err small">{{ board_error }}</p>
+  {% elif unclaimed %}
+    {% for item in unclaimed %}
+      {% include "partials/_item_card.html" %}
+    {% endfor %}
+  {% else %}
+    <div class="card">
+      <p>Nothing needs a person right now.</p>
+      <p class="muted small">
+        Only items marked as needing a response appear here, and only while
+        there is still time to respond. Things that arrived purely for the
+        record stay out of the way &mdash; you can see everything filed
+        recently further down.
+      </p>
+    </div>
+  {% endif %}
+</section>
+
+{# ---------------- You're on ---------------- #}
+{% if mine %}
+<section>
+  <div class="section-head">
+    <h2>You&rsquo;re on</h2>
+    <span class="muted small">{{ mine|length }}</span>
+  </div>
+  {% for item in mine %}
+    {% include "partials/_item_card.html" %}
+  {% endfor %}
+</section>
+{% endif %}
+
+{# ---------------- Next meeting ---------------- #}
+{% if meetings %}
+<section>
+  <div class="section-head"><h2>Next meeting{{ 's' if meetings|length > 1 }}</h2></div>
+  {% for m in meetings %}
+  <div class="card meeting">
+    <strong>{{ m.title }}</strong>
+    <ul class="props">
+      {% for name in ['Meeting Date', 'Meeting Format', 'Location', 'Zoom Link'] %}
+        {% if m.props.get(name) %}<li><span>{{ name }}</span> {{ m.props[name] }}</li>{% endif %}
+      {% endfor %}
+    </ul>
+    <a class="muted small" href="{{ m.url }}" target="_blank">Details</a>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{# ---------------- Newsletter ---------------- #}
+<section>
+  <div class="section-head"><h2>This month&rsquo;s newsletter</h2></div>
+  {% if drafts %}
+    {% for draft in drafts %}
+    <div class="card slim">
+      <strong>{{ draft.title }}</strong>
+      <span class="tag draft">draft</span>
+      <a class="btn primary" href="/newsletter?id={{ draft.id }}">Continue draft</a>
+    </div>
+    {% endfor %}
+    {% if drafts|length > 1 %}
+    <p class="muted small">More than one draft on the go &mdash; tidy up on the <a href="/archive">Newsletters page</a>.</p>
+    {% endif %}
+  {% else %}
+    <div class="card">
+      <p>No draft on the go yet.</p>
+      <a class="btn primary" href="/newsletter">Start this month&rsquo;s newsletter</a>
+    </div>
+  {% endif %}
+</section>
+
+{# ---------------- Recently filed ---------------- #}
+{% if recent %}
+<section>
+  <div class="section-head">
+    <h2>Recently filed</h2>
+    <span class="muted small">last 30 days</span>
+  </div>
+  {% for item in recent[:6] %}
+  <div class="card slim">
+    <a href="/items/{{ item.id }}">{{ item.title }}</a>
+    <span class="muted small">{{ item.props.get('Project Type', '')|replace('_', ' ') }}</span>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+{% endblock %}

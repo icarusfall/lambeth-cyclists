@@ -1,0 +1,54 @@
+# One dependency set for the whole project.
+#
+# Both Railway services install from this file. That means the worker also
+# installs FastAPI and the web service also installs pdfplumber, which is a
+# few seconds of build time in exchange for never again having the same
+# library at two versions in two places — which is exactly how the processor
+# ended up a major version behind on notion-client.
+
+# --- Shared ---
+# Notion: v3 data-sources API, used by all three services.
+notion-client>=3,<4
+# Claude: SDK 1.x. No sampling parameters (removed from the signatures and
+# rejected by Sonnet 5); depth is set with output_config effort instead.
+anthropic>=1,<2
+resend>=2.42,<3
+pydantic>=2.13,<3
+pydantic-settings>=2.15,<3
+python-dotenv>=1.2,<2
+requests>=2.34,<3
+
+# --- Processor: Gmail, Drive, attachments ---
+google-auth>=2.57,<3
+google-auth-oauthlib>=1.4,<2
+google-auth-httplib2>=0.4,<1
+google-api-python-client>=2.199,<3
+email-validator>=2.3,<3
+pdfplumber>=0.11,<1
+python-docx>=1.2,<2
+openpyxl>=3.1,<4
+tabulate>=0.10,<1
+aiohttp>=3.14,<4
+# pandas 3.x needs Python >=3.11; local dev is on 3.10 and Railway on 3.12,
+# so this is held at 2.x until both agree.
+pandas>=2.3,<3
+
+# --- Portal: web ---
+fastapi>=0.141,<1
+uvicorn[standard]>=0.52,<1
+jinja2>=3.1,<4
+python-multipart>=0.0.32
+itsdangerous>=2.2,<3
+bcrypt>=5,<6
+markdown>=3.10,<4
+
+# --- MCP server ---
+mcp[cli]>=1.26,<2
+
+# --- Error monitoring (optional) ---
+sentry-sdk>=2.68,<3
+
+# --- Tests ---
+pytest>=9,<10
+pytest-asyncio>=1.4,<2
+pytest-mock>=3.15,<4

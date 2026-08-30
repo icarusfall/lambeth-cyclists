@@ -1,0 +1,39 @@
+# Secrets
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Google OAuth artefacts
+token.json
+credentials.json
+get_refresh_token_output.txt
+
+# Tests / tooling
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Seeded design canvas is a build product; the .dc.html sources are the input.
+portal/design/lambeth-cyclists-portal.html
+portal/design/measure/
