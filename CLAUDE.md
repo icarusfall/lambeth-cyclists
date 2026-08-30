@@ -159,26 +159,33 @@ Used in auto-generated agendas:
 Ordered roughly by how much pain they cause:
 
 1. **Single-operator dependency.** Every service authenticates as Charlie —
-   his Gmail OAuth token, his API keys. Nothing survives him being unavailable,
-   and no volunteer can take a task without being handed credentials.
-2. **Silent failures.** The processor logs errors and moves on. Nobody finds out
-   an email was skipped unless they notice the item missing from Notion.
-3. **No shared config or library** across the three repos; conventions drift and
-   have to be re-fixed in each.
-4. **The processor's Notion layer is a version behind** the other two repos.
-5. **Secrets are named inconsistently across the repos.** The Anthropic key
-   is `CLAUDE_API_KEY` in the processor and `ANTHROPIC_API_KEY` in the
-   portal, and they are two different console keys — both valid, so nothing
-   is broken, but usage is split across two lines on the bill and neither
-   repo can borrow the other's `.env`. Worth collapsing to one name, and one
-   key, when the repos merge. `MCP_API_KEY` is a single self-generated shared
-   secret with the same value in the MCP server, the portal and the Vercel
-   chat app; the server accepts a comma-separated list, so per-caller keys
-   are possible later without a code change.
-6. **Docs describe the January system.** Several guides in the processor repo
-   still reference SMTP and a single-app architecture.
+   his Gmail OAuth token, his API keys. Nothing survives him being
+   unavailable, and no volunteer can take a task without being handed
+   credentials.
+2. **Silent failures, now partly visible.** The processor still logs an error
+   and carries on when an analysis fails, writing placeholder text into
+   Summary and AI Key Points. That is the right call — losing the email would
+   be worse — but it means a broken pipeline looks like a quiet one. The
+   portal dashboard now says so, and the item detail page marks affected items
+   as never read. Nothing yet pushes that to anyone who is not looking.
+3. **Projects are thinly populated.** The triager exists and the standing
+   sweeps exist, but most of the backlog has not been through them, so the
+   Projects database does not yet reflect what the group is actually working
+   on.
+4. **Two Anthropic console keys** under two names, both live. Aliased so
+   either resolves, but usage is split across two lines on the bill.
+5. **Local Python is 3.10, Railway builds on 3.13.** Everything works on both,
+   but they are far enough apart that a dependency could behave differently.
 
----
+Fixed on 30 August 2026, recorded here because the shape of the code only
+makes sense with them in mind:
+
+- The processor ran a retired model for six weeks, filing every email
+  unanalysed, because `MODEL` was written out in two files.
+- The MCP server ran unauthenticated: the key was documented and sent, and
+  never read.
+- The three repos had two Notion layers at different major versions, and
+  copies of the same helpers that had quietly diverged.
 
 ## Links
 

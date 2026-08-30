@@ -26,6 +26,7 @@ Two deployments, both on Railway, both from this repo.
 | `processor/` | Watches Gmail for labelled mail, reads it with Claude (text and vision), files structured items into Notion, generates meeting agendas, sends reminders. | worker, 24/7 |
 | `portal/` | The members' site at members.lambethcyclists.com. The board, triage, adding items by hand, the newsletter builder, chat. | web |
 | `mcp/` | CycleBot: read-only Notion tools over MCP, used by the portal's chat. Being folded into the portal. | web (for now) |
+| `core/` | Shared by all three: how we call Claude, how we read Notion, how we send mail. | library |
 
 Notion is the only datastore. There is no database of our own.
 
