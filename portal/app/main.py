@@ -14,12 +14,34 @@ from app.auth import (
     verify_login,
 )
 from app.routes import account, archive, board, chat, dashboard, newsletter, triage
+from app.config import get_settings
 from app.web import templates
 
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="Lambeth Cyclists Portal")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+
+@app.middleware("http")
+async def redirect_front_door(request: Request, call_next):
+    """Send the bare domain to the public site instead of a login page.
+
+    Someone who hears about the group and types lambethcyclists.com should
+    land on lambethcyclists.org.uk, not a password prompt. Members arrive on
+    members.lambethcyclists.com, which says what it is.
+
+    Matching is on the Host header, so both domains can point at this one
+    service and no second deployment is needed just to serve a redirect.
+    Railway's health checks arrive on the railway.app host and are unaffected.
+    Everything redirects to the root: deep paths here have no counterpart there.
+    """
+    settings = get_settings()
+    host = (request.headers.get("host") or "").split(":")[0].lower()
+    fronts = {h.strip().lower() for h in settings.redirect_hosts.split(",") if h.strip()}
+    if host in fronts and settings.redirect_to:
+        return RedirectResponse(settings.redirect_to, status_code=settings.redirect_status)
+    return await call_next(request)
 
 
 @app.exception_handler(LoginRequired)

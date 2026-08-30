@@ -27,6 +27,16 @@ class Settings(BaseSettings):
     mcp_server_url: str = "https://lambeth-cyclists-mcp-production.up.railway.app/mcp"
     mcp_api_key: str = ""
 
+    # Hosts that redirect away instead of serving the portal.
+    # The bare domain reads as the organisation's front door, so it belongs to
+    # the public site rather than a login wall; members come in on a subdomain
+    # that says what it is. Comma-separated, matched on the Host header.
+    redirect_hosts: str = "lambethcyclists.com,www.lambethcyclists.com"
+    redirect_to: str = "https://lambethcyclists.org.uk"
+    # 302 while this is new: a 301 is cached hard by browsers and awkward to
+    # undo. Move it to 301 once the arrangement is settled.
+    redirect_status: int = 302
+
     # Sending
     resend_api_key: str = ""
     newsletter_from: str = "Lambeth Cyclists <newsletter@lambethcyclists.com>"
