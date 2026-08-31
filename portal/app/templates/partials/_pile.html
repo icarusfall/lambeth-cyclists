@@ -1,0 +1,95 @@
+{# The unsorted pile, as a tick-list.
+
+   Sorting by hand is the fast path, not the fallback: most of what arrives is
+   routine post that needs no project, and reading thirty titles and ticking
+   the dull ones takes a couple of minutes. Re-rendered whole after each
+   action, so the rows that were dealt with simply vanish. #}
+<section id="pile">
+  <div class="section-head">
+    <h2>What&rsquo;s in the pile</h2>
+    <span class="muted small">{{ items|length }} left &middot; newest first</span>
+  </div>
+
+  {% if message %}<p class="flash ok">{{ message }}</p>{% endif %}
+  {% if error %}<p class="flash err">{{ error }}</p>{% endif %}
+
+  {% if not items %}
+    <div class="card">
+      <p>Nothing left to sort. </p>
+      <p class="muted small">New post lands here as the email watcher files it.</p>
+    </div>
+  {% else %}
+
+  <form id="pile-form"
+        hx-post="/triage/sort"
+        hx-target="#pile"
+        hx-swap="outerHTML"
+        hx-indicator="#pile-saving">
+
+    <div class="pile-tools">
+      <label class="inline small">
+        <input type="checkbox" id="pile-all"> tick all {{ items|length }}
+      </label>
+      <span class="muted small">or tick the ones you want to deal with together</span>
+    </div>
+
+    {% for item in items %}
+    <label class="card slim pile-row">
+      <input type="checkbox" name="item_ids" value="{{ item.id }}" class="pile-check">
+      <span class="pile-body">
+        <span class="pile-title">{{ item.title }}</span>
+        <span class="muted small pile-facts">
+          {% if item.project_type %}{{ item.project_type|replace('_',' ') }} &middot; {% endif %}
+          {{ item.received[:10] }}
+          {% if item.locations %} &middot; {{ item.locations|join(', ') }}{% endif %}
+        </span>
+        {% if item.summary %}<span class="pile-summary muted small">{{ item.summary[:180] }}{% if item.summary|length > 180 %}&hellip;{% endif %}</span>{% endif %}
+      </span>
+      <a class="muted small pile-open" href="/items/{{ item.id }}" onclick="event.stopPropagation()">Open</a>
+    </label>
+    {% endfor %}
+
+    {# Sticky so the actions are reachable without scrolling back up a long pile #}
+    <div class="pile-bar" id="pile-bar">
+      <span class="pile-count"><strong id="pile-n">0</strong> ticked</span>
+      <button class="btn" type="submit" name="action" value="ignore" disabled>
+        Not worth tracking
+      </button>
+      <select name="project_id" id="pile-project">
+        <option value="">add to&hellip;</option>
+        {% for p in projects %}
+        <option value="{{ p.id }}">{{ p.title }}{% if p.standing %} (standing){% endif %}</option>
+        {% endfor %}
+      </select>
+      <button class="btn primary" type="submit" name="action" value="attach" disabled>
+        Add to that
+      </button>
+      <span id="pile-saving" class="htmx-indicator spinner">saving&hellip;</span>
+    </div>
+  </form>
+  {% endif %}
+</section>
+
+<script>
+// Re-run on every htmx swap: the whole section is replaced, so listeners
+// attached to the old nodes go with it.
+(function () {
+  const form = document.getElementById('pile-form');
+  if (!form) return;
+  const boxes = () => Array.from(form.querySelectorAll('.pile-check'));
+  const buttons = () => Array.from(form.querySelectorAll('.pile-bar button'));
+  const all = document.getElementById('pile-all');
+  const n = document.getElementById('pile-n');
+
+  function sync() {
+    const ticked = boxes().filter(b => b.checked).length;
+    n.textContent = ticked;
+    buttons().forEach(b => { b.disabled = ticked === 0; });
+    form.querySelector('.pile-bar').classList.toggle('active', ticked > 0);
+    boxes().forEach(b => b.closest('.pile-row').classList.toggle('ticked', b.checked));
+  }
+  form.addEventListener('change', sync);
+  all.addEventListener('change', () => { boxes().forEach(b => { b.checked = all.checked; }); sync(); });
+  sync();
+})();
+</script>

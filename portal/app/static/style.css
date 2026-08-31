@@ -16,7 +16,7 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Source Sans 3", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
   font-size: 16px;
@@ -25,7 +25,7 @@ body {
 
 header { background: var(--green); }
 .header-inner {
-  max-width: 720px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 10px 16px;
   display: flex;
@@ -40,13 +40,13 @@ nav a { color: #e4f2e8; text-decoration: none; font-size: 15px; }
 nav a:hover { color: #fff; text-decoration: underline; }
 
 main {
-  max-width: 720px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 16px;
 }
 
 footer {
-  max-width: 720px;
+  max-width: 960px;
   margin: 24px auto;
   padding: 0 16px;
   color: var(--muted);
@@ -225,3 +225,111 @@ a.item-title:hover { text-decoration: underline; }
 .banner.err-banner { background: #fbeaea; border: 1px solid #e6baba; }
 .banner details { margin-top: 8px; }
 .banner summary { cursor: pointer; }
+
+/* --- Sorting the pile by hand --- */
+.pile-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; margin: 8px 0; }
+
+/* The whole row is the label, so a tap anywhere but the Open link ticks it */
+.pile-row {
+  display: flex; gap: 12px; align-items: flex-start;
+  cursor: pointer; margin: 6px 0;
+}
+.pile-row:hover { border-color: var(--green); }
+.pile-row.ticked { background: #f0f7f2; border-color: #bfe0ca; }
+.pile-check { margin-top: 3px; width: 18px; height: 18px; flex: none; }
+.pile-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.pile-title { font-weight: 600; }
+.pile-facts { text-transform: lowercase; }
+.pile-summary { line-height: 1.4; }
+.pile-open { flex: none; margin-left: auto; }
+
+.pile-bar {
+  position: sticky; bottom: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin-top: 12px; padding: 10px 12px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.06);
+}
+.pile-bar.active { border-color: var(--green); }
+.pile-bar select { width: auto; min-width: 150px; margin-top: 0; }
+.pile-bar button:disabled { opacity: 0.45; cursor: default; }
+.pile-bar button:disabled:hover { border-color: var(--border); }
+.pile-count { margin-right: auto; }
+
+/* --- Nav: four links, and everything else behind "More" --- */
+.nav-more { position: relative; }
+.nav-more > summary {
+  list-style: none; cursor: pointer;
+  color: #e4f2e8; font-size: 15px;
+}
+.nav-more > summary::-webkit-details-marker { display: none; }
+.nav-more > summary::after { content: " \25be"; }
+.nav-more[open] > summary { color: #fff; }
+.nav-drop {
+  position: absolute; right: 0; top: 24px; z-index: 20;
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px; min-width: 190px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.14);
+}
+.nav-drop a { color: var(--text); padding: 7px 10px; border-radius: 6px; font-size: 15px; }
+.nav-drop a:hover { background: #f0f7f2; text-decoration: none; }
+
+/* --- What we're working on --- */
+.work-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin: 12px 0; }
+@media (min-width: 760px) {
+  .work-grid { grid-template-columns: 1fr 1fr; }
+}
+
+.work-card {
+  display: flex; flex-direction: column; gap: 7px;
+  text-decoration: none; color: var(--text);
+  border-left: 4px solid var(--green);
+  margin: 0;
+}
+.work-card:hover { border-color: var(--green); box-shadow: 0 2px 10px rgba(0,0,0,0.07); }
+.work-card:hover .work-title { text-decoration: underline; }
+.work-card.quiet { border-left-color: #b9c9bd; }
+
+/* A colour per kind of work, so the grid is scannable before it's read */
+.work-card.type-infrastructure_campaign { border-left-color: var(--green); }
+.work-card.type-ongoing_monitoring { border-left-color: #7a93a8; }
+.work-card.type-campaigning { border-left-color: #c07a2a; }
+.work-card.type-membership { border-left-color: #6b5ba8; }
+.work-card.type-research { border-left-color: #4a8c8c; }
+.work-card.type-partnership { border-left-color: #a85b7a; }
+
+.work-head { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; }
+.work-title { font-size: 18px; font-weight: 700; }
+.work-desc { font-size: 15px; color: #4a5a50; line-height: 1.45; }
+.work-next { font-size: 14px; color: #4a5a50; }
+.work-facts { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; margin-top: auto; padding-top: 4px; }
+.tag.hot { background: var(--warn-bg); border: 1px solid var(--warn-border); flex: none; }
+
+/* --- One piece of work --- */
+.card.standout { border-left: 4px solid var(--green); background: #fbfdfb; }
+.card.standout h2 { margin-top: 0; }
+
+.trail { display: block; text-decoration: none; color: var(--text); }
+.trail:hover { border-color: var(--green); }
+.trail:hover .pile-title { text-decoration: underline; }
+.trail-body { display: flex; flex-direction: column; gap: 2px; }
+
+/* --- Discussion --- */
+.comment { border-left: 3px solid var(--border); }
+.comment-head { display: flex; gap: 8px; align-items: baseline; }
+.comment-body { margin: 4px 0 0; white-space: pre-wrap; }
+.comment-form label { color: var(--text); font-weight: 600; }
+.comment-form .btnrow { margin-bottom: 0; }
+.comment-form .btnrow .small { flex: 1; min-width: 200px; }
+
+.admin-only { margin-top: 24px; opacity: 0.7; }
+
+/* --- Leading a piece of work, and asking for help with it --- */
+.lead-box { align-items: center; }
+.lead-form { margin: 0; }
+.lead-also { margin-left: auto; }
+.help-ask h2 { margin-top: 0; }
+.help-ask p { margin: 0 0 8px; }
+.help-edit summary, .help-empty summary { cursor: pointer; }
+.help-empty { border-style: dashed; }

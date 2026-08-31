@@ -690,6 +690,7 @@ def projects_for_matching() -> list[dict]:
         desc = rich_text_to_str(props.get("Description", {}).get("rich_text", []))
         out.append(
             {
+                "id": p["id"],
                 "title": get_page_title(p),
                 "description": desc,
                 "type": (props.get("Project Type", {}).get("select") or {}).get("name") or "",
@@ -698,6 +699,263 @@ def projects_for_matching() -> list[dict]:
             }
         )
     return out
+
+
+# ---------------------------------------------------------------------------
+# Projects, for browsing
+# ---------------------------------------------------------------------------
+# The site's spine. A project is the unit somebody browses; the items filed
+# under it are its paper trail, and are only ever seen in that context.
+#
+# The two relations are not synced — Projects."Related Items" and
+# Items."Related Project" are separate one-way properties — so attaching an
+# item writes only the item's side and every project reads as having none of
+# them. Item counts therefore come from querying Items, never from the project.
+
+PROJECT_LIVE_STATUSES = ("active", "planning")
+
+
+def _project_summary(raw: dict) -> dict:
+    props = raw.get("properties", {})
+
+    def rt(name):
+        return rich_text_to_str(props.get(name, {}).get("rich_text", []))
+
+    def sel(name):
+        return (props.get(name, {}).get("select") or {}).get("name")
+
+    description = rt("Description")
+    # The marker is a triage convention, not something a reader needs to see.
+    standing = description.strip().startswith(STANDING_MARKER)
+    if standing:
+        description = description[len(STANDING_MARKER) :].strip()
+
+    return {
+        "id": raw["id"],
+        "url": raw.get("url"),
+        "title": get_page_title(raw),
+        "description": description,
+        "standing": standing,
+        "status": sel("Status"),
+        "type": sel("Project Type"),
+        "priority": sel("Priority"),
+        "scope": sel("Geographic Scope"),
+        "next_action": rt("Next Action"),
+        "locations": [
+            o["name"] for o in props.get("Primary Locations", {}).get("multi_select", [])
+        ],
+        "started": get_date_prop(raw, "Start Date"),
+        "target": get_date_prop(raw, "Target Completion"),
+        "lead": sel("Lead"),
+        "help_needed": rt("Help Needed"),
+    }
+
+
+def _decorate_item(raw: dict) -> dict:
+    item = simplify_page(raw)
+    props = raw.get("properties", {})
+    item["received"] = get_date_prop(raw, "Date Received")
+    item["deadline"] = get_date_prop(raw, "Consultation Deadline")
+    item["owner"] = item_owner(raw)
+    item["status"] = (props.get("Status", {}).get("select") or {}).get("name")
+    item["action_required"] = (props.get("Action Required", {}).get("select") or {}).get("name")
+    item["summary"] = item["props"].get("Summary", "")
+    return item
+
+
+def _items_by_project() -> dict[str, list[dict]]:
+    """Every filed item that belongs to a project, grouped by project id.
+
+    One query rather than one per project: the whole Items database is small
+    enough that grouping in Python is cheaper than N round trips.
+    """
+    results = query(
+        get_settings().notion_items_db,
+        filter_obj={"property": "Related Project", "relation": {"is_not_empty": True}},
+        sorts=[{"property": "Date Received", "direction": "descending"}],
+        limit=100,
+    )
+    grouped: dict[str, list[dict]] = {}
+    for raw in results:
+        item = _decorate_item(raw)
+        for rel in raw["properties"].get("Related Project", {}).get("relation", []):
+            grouped.setdefault(rel["id"], []).append(item)
+    return grouped
+
+
+def project_overview() -> list[dict]:
+    """Every live project with what has landed under it — the front page.
+
+    Ordered so a newcomer meets the busiest work first: projects with recent
+    post above quiet ones, and standing sweeps below campaigns of the same
+    weight, because a sweep is rarely the thing somebody wants to join.
+    """
+    raws = query(
+        get_settings().notion_projects_db,
+        filter_obj={
+            "or": [
+                {"property": "Status", "select": {"equals": s}}
+                for s in PROJECT_LIVE_STATUSES
+            ]
+        },
+        limit=60,
+    )
+    grouped = _items_by_project()
+    out = []
+    for raw in raws:
+        p = _project_summary(raw)
+        items = grouped.get(p["id"], [])
+        p["item_count"] = len(items)
+        p["latest"] = max((i["received"] for i in items if i["received"]), default=None)
+        p["people"] = sorted({i["owner"] for i in items if i["owner"]})
+        out.append(p)
+
+    today = date.today()
+
+    def rank(p):
+        recency = (today - p["latest"]).days if p["latest"] else 9999
+        return (p["standing"], recency, -p["item_count"], p["title"].lower())
+
+    out.sort(key=rank)
+    return out
+
+
+def items_for_project(project_id: str, limit: int = 100) -> list[dict]:
+    """The paper trail under one project, newest first."""
+    results = query(
+        get_settings().notion_items_db,
+        filter_obj={"property": "Related Project", "relation": {"contains": project_id}},
+        sorts=[{"property": "Date Received", "direction": "descending"}],
+        limit=limit,
+    )
+    return [_decorate_item(raw) for raw in results]
+
+
+def project_detail(page_id: str) -> dict:
+    """One project in full, with its items."""
+    raw = client().pages.retrieve(page_id=page_id)
+    props = raw.get("properties", {})
+    p = _project_summary(raw)
+
+    def rt(name):
+        return rich_text_to_str(props.get(name, {}).get("rich_text", []))
+
+    p["milestones"] = rt("Key Milestones")
+    p["success_metrics"] = rt("Success Metrics")
+    p["outcome"] = rt("Final Outcome")
+    p["website"] = (props.get("Campaign Website", {}) or {}).get("url")
+    p["items"] = items_for_project(page_id)
+    p["people"] = sorted({i["owner"] for i in p["items"] if i["owner"]})
+    p["latest"] = max((i["received"] for i in p["items"] if i["received"]), default=None)
+    return p
+
+
+# ---------------------------------------------------------------------------
+# Asking for, and offering, help
+# ---------------------------------------------------------------------------
+# Lead and Help Needed are added by scripts/add_project_help_fields.py. Both
+# are optional: a workspace without them still browses, it just cannot say
+# who is steering anything, so every read of them tolerates their absence.
+
+LEAD_PROP = "Lead"
+HELP_PROP = "Help Needed"
+
+
+def claim_project(page_id: str, user: str) -> dict:
+    """Put your name to a piece of work, unless somebody got there first."""
+    raw = client().pages.retrieve(page_id=page_id)
+    current = (raw["properties"].get(LEAD_PROP, {}).get("select") or {}).get("name")
+    if current and current != user:
+        return project_detail(page_id)
+    client().pages.update(
+        page_id=page_id, properties={LEAD_PROP: {"select": {"name": user}}}
+    )
+    return project_detail(page_id)
+
+
+def release_project(page_id: str, user: str) -> dict:
+    """Hand it back. Only the person holding it may."""
+    raw = client().pages.retrieve(page_id=page_id)
+    current = (raw["properties"].get(LEAD_PROP, {}).get("select") or {}).get("name")
+    if current != user:
+        return project_detail(page_id)
+    client().pages.update(page_id=page_id, properties={LEAD_PROP: {"select": None}})
+    return project_detail(page_id)
+
+
+def set_help_needed(page_id: str, text: str):
+    """What a new person could actually do here, in plain words."""
+    client().pages.update(
+        page_id=page_id,
+        properties={
+            HELP_PROP: {"rich_text": [{"type": "text", "text": {"content": text[:1900]}}]}
+            if text.strip()
+            else {"rich_text": []}
+        },
+    )
+
+
+def ways_to_help() -> list[dict]:
+    """Live projects that have said what they need, or have nobody steering.
+
+    Ordered by how easy it is to say yes to: a project that has spelled out
+    what it wants comes above one that has only failed to name a lead.
+    """
+    projects = project_overview()
+    out = [p for p in projects if p["help_needed"] or not p["lead"]]
+    out.sort(key=lambda p: (not p["help_needed"], p["standing"], p["title"].lower()))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Discussion
+# ---------------------------------------------------------------------------
+# Notion's own page comments, so a conversation started in the portal is the
+# same conversation Charlie sees in Notion, and there is no sixth database to
+# keep in step. The cost is attribution: everything is posted by the
+# integration, so the author's name is written into the comment as a bold
+# first run and read back off it. Notion's API cannot delete a comment — only
+# a person, in Notion, can.
+
+
+def _comment_runs(author: str, text: str) -> list[dict]:
+    return [
+        {
+            "type": "text",
+            "text": {"content": author.capitalize()},
+            "annotations": {"bold": True},
+        },
+        {"type": "text", "text": {"content": ": " + text[:1900]}},
+    ]
+
+
+def _read_comment(raw: dict) -> dict:
+    runs = raw.get("rich_text", [])
+    author, body = None, "".join(r.get("plain_text", "") for r in runs)
+    if runs and runs[0].get("annotations", {}).get("bold"):
+        rest = "".join(r.get("plain_text", "") for r in runs[1:])
+        if rest.startswith(": "):
+            author, body = runs[0]["plain_text"], rest[2:]
+    created = raw.get("created_time", "")
+    return {
+        "id": raw["id"],
+        "author": author,
+        "body": body,
+        "created": datetime.fromisoformat(created.replace("Z", "+00:00")) if created else None,
+    }
+
+
+def list_comments(page_id: str) -> list[dict]:
+    """Comments on a page, oldest first."""
+    results = client().comments.list(block_id=page_id).get("results", [])
+    return [_read_comment(c) for c in results]
+
+
+def add_comment(page_id: str, author: str, text: str) -> dict:
+    raw = client().comments.create(
+        parent={"page_id": page_id}, rich_text=_comment_runs(author, text)
+    )
+    return _read_comment(raw)
 
 
 # ---------------------------------------------------------------------------
@@ -749,7 +1007,11 @@ def item_detail(page_id: str) -> dict:
     if related:
         try:
             project_page = client().pages.retrieve(page_id=related[0]["id"])
-            project = {"title": get_page_title(project_page), "url": project_page.get("url")}
+            project = {
+                "id": related[0]["id"],
+                "title": get_page_title(project_page),
+                "url": project_page.get("url"),
+            }
         except Exception:
             logger.exception("Could not resolve related project for %s", page_id)
 

@@ -16,8 +16,8 @@
     {% if projects %}
       We track {{ projects|length }} project{{ 's' if projects|length != 1 }}.
       {% if standing %}
-      <span class="muted">{{ standing|length }} of them are standing projects
-      ({{ standing|join(', ') }}) that recurring items get swept into rather
+      <span class="muted">{{ standing|length }} of them are standing ones
+      ({{ standing|join(', ') }}) that recurring post gets swept into rather
       than spawning something new.</span>
       {% endif %}
     {% else %}
@@ -25,36 +25,26 @@
     {% endif %}
   </p>
   <p class="muted small">
-    Claude reads the whole pile at once &mdash; that&rsquo;s how it spots that five
-    separate emails are all the same scheme. Nothing is saved until you accept a
-    suggestion, and you can reject any of them. Clearing this backlog takes a few
-    minutes; after that there are only ever a handful of new items a week.
+    Most of a pile like this is routine post that needs no project at all. Tick
+    those and press <em>Not worth tracking</em>; tick the ones that belong
+    together and add them to a project. Nothing here is deleted &mdash; filed
+    items stay searchable, they just stop asking for attention.
   </p>
   {% if items %}
   <form hx-post="/triage/propose" hx-target="#proposals" hx-swap="innerHTML" hx-indicator="#thinking">
     <div class="btnrow">
-      <button class="btn primary" type="submit">Suggest how these group up</button>
+      <button class="btn" type="submit">Or let Claude suggest how they group up</button>
       <span id="thinking" class="htmx-indicator spinner">reading all {{ items|length }} of them &mdash; the first sort takes a few minutes, later ones are quick&hellip;</span>
     </div>
+    <p class="muted small">Reads the whole pile at once, so it spots that five
+    separate emails are the same scheme. Nothing is saved until you accept a
+    suggestion.</p>
   </form>
   {% endif %}
 </div>
 
 <div id="proposals"></div>
 
-{% if items %}
-<section>
-  <div class="section-head">
-    <h2>What&rsquo;s in the pile</h2>
-    <span class="muted small">newest first</span>
-  </div>
-  {% for item in items %}
-  <div class="card slim">
-    <span class="muted small">{{ item.number }}</span>
-    <a href="/items/{{ item.id }}">{{ item.title }}</a>
-    <span class="muted small">{{ item.props.get('Project Type', '')|replace('_',' ') }} &middot; {{ item.received }}</span>
-  </div>
-  {% endfor %}
-</section>
-{% endif %}
+{% include "partials/_pile.html" %}
+
 {% endblock %}

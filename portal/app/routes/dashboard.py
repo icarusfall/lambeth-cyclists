@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/")
-async def home(request: Request, user: str = Depends(require_user)):
+@router.get("/desk")
+async def desk(request: Request, user: str = Depends(require_user)):
     error = None
     meetings, recent, drafts = [], [], []
     health = None

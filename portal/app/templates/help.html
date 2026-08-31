@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Where you could help — Lambeth Cyclists{% endblock %}
+{% block content %}
+
+<h1>Where you could help</h1>
+<p class="muted lede">
+  Nobody here is expected to take on more than they want to. Reading one
+  consultation, or saying what you think about one road, is a real
+  contribution and plenty of people never do more than that.
+</p>
+
+{% if error %}<p class="flash err">{{ error }}</p>{% endif %}
+
+{# ---------- Work that has said what it needs ---------- #}
+<section>
+  <div class="section-head"><h2>Work looking for someone</h2></div>
+
+  {% if ways %}
+  <div class="work-grid">
+    {% for p in ways %}
+    <a class="card work-card type-{{ p.type or 'other' }}" href="/work/{{ p.id }}">
+      <span class="work-head">
+        <span class="work-title">{{ p.title }}</span>
+        {% if not p.lead %}<span class="tag hot">unled</span>{% endif %}
+      </span>
+      {% if p.help_needed %}
+        <span class="work-desc"><strong>{{ p.help_needed }}</strong></span>
+      {% elif p.description %}
+        <span class="work-desc">{{ p.description[:200] }}{% if p.description|length > 200 %}&hellip;{% endif %}</span>
+      {% endif %}
+      <span class="work-facts muted small">
+        {% if p.type %}<span class="chip">{{ p.type|replace('_',' ') }}</span>{% endif %}
+        {% if p.lead %}<span>led by {{ p.lead|capitalize }}</span>
+        {% else %}<span>nobody steering it yet</span>{% endif %}
+      </span>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card">
+    <p>Everything currently has somebody on it.</p>
+    <p class="muted small">
+      That won&rsquo;t last &mdash; have a look at
+      <a href="/">what we&rsquo;re working on</a> and say hello on anything
+      that interests you.
+    </p>
+  </div>
+  {% endif %}
+</section>
+
+{# ---------- Things with a closing date ---------- #}
+<section>
+  <div class="section-head">
+    <h2>Closing soon</h2>
+    <span class="muted small">consultations and notices that need a reply</span>
+  </div>
+
+  {% if jobs %}
+    {% for item in jobs %}
+      {% include "partials/_item_card.html" %}
+    {% endfor %}
+  {% else %}
+  <div class="card">
+    <p>Nothing is waiting on a reply just now.</p>
+    <p class="muted small">
+      Consultations appear here while there is still time to respond to them.
+    </p>
+  </div>
+  {% endif %}
+</section>
+
+<section>
+  <div class="section-head"><h2>Or just come along</h2></div>
+  <div class="card">
+    <p>
+      Meetings are open to anyone &mdash; you don&rsquo;t have to be an LCC
+      member and you don&rsquo;t have to have done anything first. The next one
+      is listed on <a href="/desk">your desk</a>.
+    </p>
+  </div>
+</section>
+
+{% endblock %}

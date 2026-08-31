@@ -26,9 +26,8 @@ async def triage_page(request: Request, user: str = Depends(require_user)):
     items, projects, standing = [], [], []
     try:
         items = notion.untriaged_items()
-        all_projects = notion.projects_for_matching()
-        projects = [p["title"] for p in all_projects]
-        standing = [p["title"] for p in all_projects if p["standing"]]
+        projects = notion.projects_for_matching()
+        standing = [p["title"] for p in projects if p["standing"]]
     except Exception as e:
         logger.exception("Triage queue failed to load")
         error = f"Couldn't load the queue from Notion: {e}"
@@ -36,8 +35,68 @@ async def triage_page(request: Request, user: str = Depends(require_user)):
         request,
         "triage.html",
         {"user": user, "items": items, "projects": projects,
-         "standing": standing, "error": error},
+         "standing": standing, "error": error, "message": None},
     )
+
+
+def _pile(request: Request, user: str, message=None, error=None):
+    """Re-render the pile from Notion. Rows just dealt with are gone from it."""
+    items, projects = [], []
+    try:
+        items = notion.untriaged_items()
+        projects = notion.projects_for_matching()
+    except Exception as e:
+        logger.exception("Reloading the pile failed")
+        error = error or f"That saved, but the list wouldn't reload: {e}"
+    return templates.TemplateResponse(
+        request,
+        "partials/_pile.html",
+        {"user": user, "items": items, "projects": projects,
+         "message": message, "error": error},
+    )
+
+
+@router.post("/triage/sort")
+async def sort_by_hand(
+    request: Request,
+    action: str = Form(...),
+    item_ids: list[str] = Form(default=[]),
+    project_id: str = Form(""),
+    user: str = Depends(require_user),
+):
+    """Deal with a ticked batch: file it away, or add it to a project.
+
+    The counterpart to the AI proposal flow, and the faster one for a pile of
+    routine post — most of what arrives belongs to nothing and only needs
+    getting out of the way.
+    """
+    ids = [i.strip() for i in item_ids if i.strip()]
+    if not ids:
+        return _pile(request, user, error="Nothing was ticked.")
+
+    n = len(ids)
+    plural = "s" if n != 1 else ""
+    try:
+        if action == "ignore":
+            done = notion.set_items_not_relevant(ids)
+            message = f"Filed away {done} item{'s' if done != 1 else ''}."
+        elif action == "attach":
+            if not project_id:
+                return _pile(request, user, error=f"Pick a project for those {n} item{plural}.")
+            done = notion.attach_items_to_project(ids, project_id)
+            title = next(
+                (p["title"] for p in notion.projects_for_matching() if p["id"] == project_id),
+                "that project",
+            )
+            message = f"Added {done} item{'s' if done != 1 else ''} to {title}."
+        else:
+            return _pile(request, user, error="Don't know how to do that.")
+    except Exception as e:
+        logger.exception("Sorting %d item(s) by hand failed", n)
+        return _pile(request, user, error=f"Couldn't save that: {e}")
+
+    logger.info("%s sorted %d item(s) by hand (%s)", user, n, action)
+    return _pile(request, user, message=message)
 
 
 @router.post("/triage/propose")

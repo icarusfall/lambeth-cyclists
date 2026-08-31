@@ -1,0 +1,26 @@
+{# Who is steering one piece of work. Swapped in place, so it stands alone. #}
+<div class="card slim lead-box" id="lead">
+  {% if p.lead %}
+    <span class="muted small">Led by</span>
+    <span class="tag mine">{{ p.lead|capitalize }}</span>
+    {% if p.lead == user %}
+      <form hx-post="/work/{{ p.id }}/lead" hx-target="#lead" hx-swap="outerHTML" class="lead-form">
+        <input type="hidden" name="release" value="1">
+        <button class="btn ghost small-btn" type="submit">Hand it back</button>
+      </form>
+    {% else %}
+      <span class="muted small">&mdash; talk to {{ p.lead|capitalize }} in the discussion below if you want to help.</span>
+    {% endif %}
+  {% else %}
+    <span class="muted">Nobody is steering this one.</span>
+    <form hx-post="/work/{{ p.id }}/lead" hx-target="#lead" hx-swap="outerHTML" class="lead-form">
+      <button class="btn primary small-btn" type="submit">I&rsquo;ll take this on</button>
+    </form>
+  {% endif %}
+
+  {% if p.people %}
+    <span class="muted small lead-also">Also on it: {{ p.people|map('capitalize')|join(', ') }}</span>
+  {% endif %}
+  {% if message %}<span class="flash ok small">{{ message }}</span>{% endif %}
+  <span class="htmx-indicator spinner">saving&hellip;</span>
+</div>

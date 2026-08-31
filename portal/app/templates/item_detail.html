@@ -54,7 +54,7 @@
 </div>
 
 {% if item.project %}
-<p class="small">Part of <a href="{{ item.project.url }}" target="_blank"><strong>{{ item.project.title }}</strong></a></p>
+<p class="small">Part of <a href="/work/{{ item.project.id }}"><strong>{{ item.project.title }}</strong></a></p>
 {% endif %}
 
 {# ---------- What it says ---------- #}
@@ -128,6 +128,8 @@
   </ul>
   <p class="muted small"><a href="{{ item.url }}" target="_blank">Open in Notion</a></p>
 </div>
+
+{% include "partials/_comments.html" %}
 
 {% endif %}
 {% endblock %}

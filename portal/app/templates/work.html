@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}What we're working on — Lambeth Cyclists{% endblock %}
+{% block content %}
+
+<h1>What we&rsquo;re working on</h1>
+<p class="muted lede">
+  Lambeth Cyclists is the Lambeth branch of the London Cycling Campaign. This is
+  everything the group has on at the moment. Have a look through &mdash; if
+  something interests you, open it, read what&rsquo;s been happening and say so in
+  the discussion at the bottom. You don&rsquo;t need to know anything about it
+  already.
+</p>
+
+{% if error %}<p class="flash err">{{ error }}</p>{% endif %}
+
+{% if not projects and not standing and not error %}
+<div class="card">
+  <p>Nothing is being tracked yet.</p>
+  <p class="muted small">Work appears here once it&rsquo;s been set up in
+  <a href="/triage">sorting</a>.</p>
+</div>
+{% endif %}
+
+{% macro project_card(p, muted=False) %}
+<a class="card work-card{{ ' quiet' if muted }} type-{{ p.type or 'other' }}" href="/work/{{ p.id }}">
+  <span class="work-head">
+    <span class="work-title">{{ p.title }}</span>
+    {% if p.priority in ('strategic', 'high') and not muted %}
+      <span class="tag hot">{{ 'Priority' if p.priority == 'high' else 'Strategic' }}</span>
+    {% endif %}
+  </span>
+
+  {% if p.description %}
+    <span class="work-desc">{{ p.description[:260] }}{% if p.description|length > 260 %}&hellip;{% endif %}</span>
+  {% endif %}
+
+  {% if p.next_action %}
+    <span class="work-next"><strong>Next:</strong> {{ p.next_action }}</span>
+  {% endif %}
+
+  <span class="work-facts muted small">
+    {% if p.type %}<span class="chip">{{ p.type|replace('_', ' ') }}</span>{% endif %}
+    {% if p.locations %}<span class="chip">{{ p.locations[:3]|join(', ') }}</span>{% endif %}
+    {% if p.item_count %}
+      <span>{{ p.item_count }} thing{{ 's' if p.item_count != 1 }} filed{% if p.latest %}, latest {{ p.latest|humandate }}{% endif %}</span>
+    {% else %}
+      <span>nothing filed under it yet</span>
+    {% endif %}
+    {% if p.people %}<span>&middot; {{ p.people|map('capitalize')|join(', ') }}</span>{% endif %}
+  </span>
+</a>
+{% endmacro %}
+
+{% if projects %}
+<div class="work-grid">
+  {% for p in projects %}{{ project_card(p) }}{% endfor %}
+</div>
+{% endif %}
+
+{% if standing %}
+<section>
+  <div class="section-head">
+    <h2>Things we keep an eye on</h2>
+  </div>
+  <p class="muted small">
+    Subjects that never really finish. Lambeth produces a steady trickle of post
+    about each one, and rather than start something new every time, it all
+    collects here. Good places to lurk if you want a feel for what the council
+    is up to.
+  </p>
+  <div class="work-grid">
+    {% for p in standing %}{{ project_card(p, muted=True) }}{% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section>
+  <div class="section-head"><h2>Not sure where to start?</h2></div>
+  <div class="card">
+    <p>
+      Open whichever of these you have an opinion about and leave a comment.
+      Or see <a href="/help">where we&rsquo;re actually short of people</a>
+      &mdash; some of it is an hour&rsquo;s reading, not a commitment.
+    </p>
+    <div class="btnrow">
+      <a class="btn primary" href="/help">Where you could help</a>
+      <a class="btn" href="/chat">Ask a question about any of this</a>
+      <a class="btn ghost" href="/archive">Read a past newsletter</a>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

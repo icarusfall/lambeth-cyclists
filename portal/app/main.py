@@ -13,7 +13,7 @@ from app.auth import (
     create_session_token,
     verify_login,
 )
-from app.routes import account, archive, board, chat, dashboard, newsletter, triage
+from app.routes import account, archive, board, chat, dashboard, newsletter, triage, work
 from app.config import get_settings
 from app.web import templates
 
@@ -90,6 +90,8 @@ async def health():
     return {"status": "ok"}
 
 
+# work owns "/": the front door is what the group is doing, not an inbox.
+app.include_router(work.router)
 app.include_router(dashboard.router)
 app.include_router(board.router)
 app.include_router(triage.router)

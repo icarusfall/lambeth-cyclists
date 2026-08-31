@@ -13,6 +13,7 @@ from fastapi.responses import RedirectResponse
 
 from app import ai, notion
 from app.auth import require_user
+from app.routes.work import _comments
 from app.web import templates
 
 logger = logging.getLogger(__name__)
@@ -171,7 +172,7 @@ async def create_new_item(
         )
 
     logger.info("%s created item %s (%s)", user, title.strip()[:60], created["id"])
-    return RedirectResponse(f"/?added={created['id']}", status_code=303)
+    return RedirectResponse(f"/desk?added={created['id']}", status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -205,8 +206,17 @@ async def item_page(request: Request, page_id: str, user: str = Depends(require_
             {"user": user, "item": None, "error": f"Couldn't load that item: {e}", "back": back},
             status_code=404,
         )
+    comments, comment_error = _comments(page_id)
     return templates.TemplateResponse(
         request,
         "item_detail.html",
-        {"user": user, "item": item, "error": None, "back": back},
+        {
+            "user": user,
+            "item": item,
+            "error": None,
+            "back": back,
+            "comments": comments,
+            "comment_error": comment_error,
+            "comment_target": f"/items/{page_id}/comment",
+        },
     )

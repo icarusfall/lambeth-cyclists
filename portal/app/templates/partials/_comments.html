@@ -1,0 +1,45 @@
+{# A discussion thread. Swapped whole after each post, so it stands alone.
+
+   These are Notion page comments: the same thread Charlie sees in Notion.
+   Nothing here can be edited or deleted from the portal — Notion's API has no
+   way to — so the form says as much before anyone presses the button. #}
+<div id="discussion">
+  <div class="section-head">
+    <h2>Discussion</h2>
+    {% if comments %}<span class="muted small">{{ comments|length }}</span>{% endif %}
+  </div>
+
+  {% if comment_error %}<p class="flash err small">{{ comment_error }}</p>{% endif %}
+
+  {% for c in comments %}
+  <div class="card comment">
+    <div class="comment-head">
+      <strong>{{ (c.author or 'Someone')|capitalize }}</strong>
+      {% if c.created %}<span class="muted small">{{ c.created.date()|humandate }}</span>{% endif %}
+    </div>
+    <p class="comment-body">{{ c.body }}</p>
+  </div>
+  {% endfor %}
+
+  {% if not comments and not comment_error %}
+  <p class="muted small">Nothing said yet. Be the first &mdash; a question counts.</p>
+  {% endif %}
+
+  <form class="card comment-form"
+        hx-post="{{ comment_target }}"
+        hx-target="#discussion"
+        hx-swap="outerHTML"
+        hx-indicator="#comment-saving">
+    <label>
+      Add to the discussion, as {{ user|capitalize }}
+      <textarea name="body" rows="3"
+                placeholder="What do you think?">{{ keep or '' }}</textarea>
+    </label>
+    <div class="btnrow">
+      <button class="btn primary" type="submit">Post</button>
+      <span id="comment-saving" class="htmx-indicator spinner">posting&hellip;</span>
+      <span class="muted small">Goes to everyone with portal access, and shows
+      up in Notion. It can&rsquo;t be edited or taken back from here.</span>
+    </div>
+  </form>
+</div>

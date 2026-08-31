@@ -1,7 +1,11 @@
 {% extends "base.html" %}
-{% block title %}The board — Lambeth Cyclists{% endblock %}
+{% block title %}Your desk — Lambeth Cyclists{% endblock %}
 {% block content %}
 <h1>Hello {{ user|capitalize }}</h1>
+<p class="muted small">
+  Your desk: what needs a person, what you&rsquo;ve taken on, and when we next
+  meet. <a href="/">Our work</a> is the wider picture.
+</p>
 {% if unclaimed or mine %}
 <p class="muted lede">
   {%- if unclaimed %}{{ unclaimed|length }} thing{{ 's' if unclaimed|length != 1 }} here need{{ 's' if unclaimed|length == 1 }} someone{% endif -%}

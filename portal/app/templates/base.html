@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Lambeth Cyclists{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚲</text></svg>">
   <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
@@ -13,15 +16,25 @@
     <div class="header-inner">
       <a class="brand" href="/">🚲 Lambeth Cyclists</a>
       {% if user %}
+      {# Two tiers on purpose. Someone who joined last week should see five
+         links, not eleven; the machinery of running the thing sits behind
+         "More" and stays out of their way. #}
       <nav>
-        <a href="/">Home</a>
-        <a href="/triage">Sort</a>
-        <a href="/items/new">Add</a>
+        <a href="/">Our work</a>
+        <a href="/help">Help out</a>
+        <a href="/desk">Your desk</a>
         <a href="/newsletter">Newsletter</a>
-        <a href="/chat">Chat</a>
-        <a href="/archive">Archive</a>
-        <a href="/account">Account</a>
-        <a class="muted" href="/logout">Log out</a>
+        <a href="/chat">Ask</a>
+        <details class="nav-more">
+          <summary>More</summary>
+          <div class="nav-drop">
+            <a href="/triage">Sort the inbox</a>
+            <a href="/items/new">Add something to watch</a>
+            <a href="/archive">Past newsletters</a>
+            <a href="/account">Your account</a>
+            <a href="/logout">Log out</a>
+          </div>
+        </details>
       </nav>
       {% endif %}
     </div>

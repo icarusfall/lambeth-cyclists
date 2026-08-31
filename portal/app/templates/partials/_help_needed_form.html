@@ -1,0 +1,12 @@
+{# Shared by both states of _help_needed.html. Clearing the box removes the ask. #}
+<form hx-post="/work/{{ p.id }}/help-needed" hx-target="#help-needed" hx-swap="outerHTML">
+  <label>
+    <textarea name="text" rows="3"
+              placeholder="Someone to&hellip;">{{ p.help_needed }}</textarea>
+  </label>
+  <div class="btnrow">
+    <button class="btn primary small-btn" type="submit">Save</button>
+    <span class="htmx-indicator spinner">saving&hellip;</span>
+    <span class="muted small">Leave it empty to take the ask down.</span>
+  </div>
+</form>

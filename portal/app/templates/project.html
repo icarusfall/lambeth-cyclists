@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ p.title if p else 'Not found' }} — Lambeth Cyclists{% endblock %}
+{% block content %}
+
+<p class="muted small"><a href="/">&larr; Everything we&rsquo;re working on</a></p>
+
+{% if error %}<p class="flash err">{{ error }}</p>{% endif %}
+{% if p %}
+
+<div class="item-meta">
+  {% if p.type %}<span class="chip">{{ p.type|replace('_',' ') }}</span>{% endif %}
+  {% if p.scope %}<span class="chip">{{ p.scope|replace('_',' ') }}</span>{% endif %}
+  {% if p.priority %}<span class="chip{{ ' chip-strong' if p.priority in ('strategic','high') }}">{{ p.priority }}</span>{% endif %}
+  {% if p.standing %}<span class="chip">ongoing</span>{% endif %}
+</div>
+
+<h1>{{ p.title }}</h1>
+
+{% if p.description %}<p class="lede">{{ p.description }}</p>{% endif %}
+
+{# ---------- Where it's up to ---------- #}
+{% if p.next_action or p.milestones or p.target %}
+<div class="card standout">
+  <h2>Where it&rsquo;s up to</h2>
+  {% if p.next_action %}<p>{{ p.next_action }}</p>{% endif %}
+  {% if p.milestones %}<div class="prose">{{ p.milestones|markdown|safe }}</div>{% endif %}
+  <ul class="props">
+    {% if p.target %}<li><span>Aiming for</span> {{ p.target|humandate }}</li>{% endif %}
+    {% if p.started %}<li><span>Going since</span> {{ p.started|humandate }}</li>{% endif %}
+    {% if p.website %}<li><span>More</span> <a href="{{ p.website }}" target="_blank">{{ p.website }}</a></li>{% endif %}
+  </ul>
+</div>
+{% endif %}
+
+{# ---------- Who's on it, and what it wants ---------- #}
+{% include "partials/_lead.html" %}
+{% include "partials/_help_needed.html" %}
+
+{# ---------- The paper trail ---------- #}
+<section>
+  <div class="section-head">
+    <h2>What&rsquo;s come in</h2>
+    {% if p['items'] %}<span class="muted small">{{ p['items']|length }} &middot; newest first</span>{% endif %}
+  </div>
+
+  {% if p['items'] %}
+  <p class="muted small">
+    Consultations, traffic orders, council notices and member emails that
+    belong to this. Open any of them for the full text and the attachments.
+  </p>
+    {% for item in p['items'] %}
+    <a class="card slim trail" href="/items/{{ item.id }}">
+      <span class="trail-body">
+        <span class="pile-title">{{ item.title }}</span>
+        <span class="muted small">
+          {% if item.received %}{{ item.received|humandate }}{% endif %}
+          {% if item.deadline %}
+            {% set days = (item.deadline - today()).days %}
+            &middot; <span class="{{ 'deadline' if 0 <= days <= 14 }}">{% if days < 0 %}closed{% else %}closes {{ item.deadline|humandate }}{% endif %}</span>
+          {% endif %}
+          {% if item.owner %}&middot; with {{ item.owner|capitalize }}{% endif %}
+        </span>
+        {% if item.summary %}<span class="pile-summary muted small">{{ item.summary[:200] }}{% if item.summary|length > 200 %}&hellip;{% endif %}</span>{% endif %}
+      </span>
+    </a>
+    {% endfor %}
+  {% else %}
+  <div class="card">
+    <p>Nothing has been filed under this yet.</p>
+    <p class="muted small">
+      Post arrives by email and gets sorted onto whichever piece of work it
+      belongs to. This one hasn&rsquo;t had any yet &mdash; which usually means
+      it&rsquo;s something we&rsquo;ve decided to do rather than something
+      we&rsquo;ve been sent.
+    </p>
+  </div>
+  {% endif %}
+</section>
+
+{% include "partials/_comments.html" %}
+
+<p class="muted small admin-only"><a href="{{ p.url }}" target="_blank">Open in Notion</a></p>
+
+{% endif %}
+{% endblock %}
