@@ -11,8 +11,9 @@ import logging
 import re
 
 from fastapi import APIRouter, Depends, Form, Request
+from fastapi.responses import Response
 
-from app import notion
+from app import ai, notion
 from app.auth import require_user
 from app.config import get_settings
 from app.web import templates
@@ -275,3 +276,89 @@ async def help_needed(
     return templates.TemplateResponse(
         request, "partials/_help_needed.html", {"p": p, "user": user, "saved": True}
     )
+
+
+# ---------------------------------------------------------------------------
+# Turning one item into a project
+# ---------------------------------------------------------------------------
+# The batch triage flow reads the whole backlog at once, which is right for
+# clearing a pile. This is the other moment: you are reading one item, you can
+# already tell the council will keep coming back to it, and you want somewhere
+# to file the next six emails about it. Nothing is written until a button is
+# pressed.
+
+
+@router.post("/items/{page_id}/project/suggest")
+async def suggest_project(request: Request, page_id: str, user: str = Depends(require_user)):
+    """Draft the project this item would start — or name the one it joins."""
+    try:
+        item = notion.item_detail(page_id)
+        projects = notion.projects_for_matching()
+        proposal = ai.suggest_project_for_item(item, projects)
+    except Exception as e:
+        logger.exception("Suggesting a project for %s failed", page_id)
+        return templates.TemplateResponse(
+            request, "partials/_error.html", {"error": f"Couldn't work that out: {e}"}
+        )
+    return templates.TemplateResponse(
+        request,
+        "partials/_item_project_form.html",
+        {
+            "user": user,
+            "item_id": page_id,
+            "s": proposal,
+            "projects": projects,
+            "project_kinds": ai.PROJECT_KINDS,
+            "scopes": ai.SCOPES,
+            "priorities": ai.PROJECT_PRIORITIES,
+        },
+    )
+
+
+@router.post("/items/{page_id}/project")
+async def give_item_a_project(
+    request: Request,
+    page_id: str,
+    existing_id: str = Form(""),
+    title: str = Form(""),
+    description: str = Form(""),
+    project_type: str = Form("ongoing_monitoring"),
+    geographic_scope: str = Form("neighbourhood"),
+    priority: str = Form("medium"),
+    primary_locations: str = Form(""),
+    next_action: str = Form(""),
+    user: str = Depends(require_user),
+):
+    """File the item under a project — an existing one, or a new one.
+
+    Answers with a redirect to the project rather than a fragment: the point
+    of the press was to go and look at the thing you just made.
+    """
+    try:
+        if existing_id:
+            project_id = existing_id
+        else:
+            if not title.strip():
+                return templates.TemplateResponse(
+                    request, "partials/_error.html", {"error": "Give it a name first."}
+                )
+            created = notion.create_project(
+                title=title.strip(),
+                description=description.strip(),
+                project_type=project_type,
+                geographic_scope=geographic_scope,
+                priority=priority,
+                primary_locations=[l.strip() for l in primary_locations.split(",") if l.strip()],
+                next_action=next_action.strip(),
+            )
+            project_id = created["id"]
+            logger.info("%s started project %r from item %s", user, title.strip()[:60], page_id)
+        notion.attach_items_to_project([page_id], project_id)
+    except Exception as e:
+        logger.exception("Giving item %s a project failed", page_id)
+        return templates.TemplateResponse(
+            request, "partials/_error.html", {"error": f"Couldn't save that: {e}"}
+        )
+
+    # htmx cannot usefully follow a 303, so tell it where to go instead.
+    return Response(status_code=204, headers={"HX-Redirect": f"/work/{project_id}"})

@@ -1,0 +1,86 @@
+{# What Claude made of one item: where it belongs, and what it would start.
+
+   Ordered by what it costs you. Filing it under something we already run is
+   one press and no new thing to maintain, so it goes first. Starting a new
+   project is a commitment — every one is another thing somebody has to keep
+   an eye on — so it sits below, editable, and never pre-pressed. #}
+
+{% if s.reasoning %}<p class="muted small">{{ s.reasoning }}</p>{% endif %}
+
+{% if s.matches_existing %}
+{% set match = (projects | selectattr('title', 'equalto', s.matches_existing) | list | first) %}
+{% if match %}
+<div class="card sweep">
+  <strong class="item-title">{{ match.title }}</strong>
+  <p class="item-summary">This looks like it belongs to something we already
+    run{% if match.standing %} &mdash; a standing one, which exists to absorb
+    everything on its subject{% endif %}.</p>
+  <form hx-post="/items/{{ item_id }}/project">
+    <input type="hidden" name="existing_id" value="{{ match.id }}">
+    <div class="btnrow">
+      <button class="btn primary" type="submit">File it under this</button>
+      <span class="htmx-indicator spinner">saving&hellip;</span>
+    </div>
+  </form>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="card proposal-new">
+  <h2>{{ "Or start something new for it" if s.matches_existing else "Start something new for it" }}</h2>
+  <p class="muted small">
+    Every project is one more thing somebody has to keep an eye on, so this is
+    worth it when the council will keep coming back to the subject &mdash; a
+    corridor, a scheme with several consultations ahead of it. Edit anything
+    below before you save.
+  </p>
+
+  <form hx-post="/items/{{ item_id }}/project">
+    <label>Name
+      <input type="text" name="title" value="{{ s.title }}" required>
+    </label>
+
+    <label>What it is
+      <textarea name="description" rows="4">{{ s.description }}</textarea>
+    </label>
+
+    <div class="field-row">
+      <label>Kind
+        <select name="project_type">
+          {% for k in project_kinds %}
+          <option value="{{ k }}" {{ 'selected' if k == s.project_type }}>{{ k|replace('_',' ') }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>How wide
+        <select name="geographic_scope">
+          {% for k in scopes %}
+          <option value="{{ k }}" {{ 'selected' if k == s.geographic_scope }}>{{ k|replace('_',' ') }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Priority
+        <select name="priority">
+          {% for k in priorities %}
+          <option value="{{ k }}" {{ 'selected' if k == s.priority }}>{{ k }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <label>Places <span class="muted small">(comma separated)</span>
+      <input type="text" name="primary_locations" value="{{ s.primary_locations|join(', ') }}">
+    </label>
+
+    <label>Next thing anyone could do
+      <input type="text" name="next_action" value="{{ s.next_action }}">
+    </label>
+
+    <div class="btnrow">
+      <button class="btn {{ 'ghost' if s.matches_existing else 'primary' }}" type="submit">
+        Start it, and file this under it
+      </button>
+      <span class="htmx-indicator spinner">saving&hellip;</span>
+    </div>
+  </form>
+</div>

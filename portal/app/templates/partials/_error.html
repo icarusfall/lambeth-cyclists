@@ -1,1 +1,4 @@
-<p class="flash err">{{ message }}</p>
+{# Every caller passes "error". It used to read {{ message }}, which only
+   newsletter.py happened to pass, so thirteen error paths in board, triage
+   and work rendered an empty red bar instead of saying what went wrong. #}
+<p class="flash err">{{ error }}</p>

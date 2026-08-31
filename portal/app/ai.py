@@ -415,3 +415,105 @@ def propose_projects(items: list[dict], projects: list[dict]) -> TriageResult:
         output_format=TriageResult,
     )
     return response.parsed_output
+
+
+# ---------------------------------------------------------------------------
+# One item that looks like the start of something
+# ---------------------------------------------------------------------------
+# The counterpart to propose_projects, for the moment you are looking at a
+# single item and can already tell it will run and run. propose_projects reads
+# the whole backlog to spot that five emails are one scheme; this reads one
+# item and asks the narrower question — does this belong somewhere we already
+# track, and if not, what would the project be called?
+#
+# It still gets the existing projects, because "start a project for this" is
+# most often answered by "we already have one".
+
+
+class ItemProjectProposal(BaseModel):
+    matches_existing: str | None = Field(
+        default=None,
+        description=(
+            "Exact title of an existing project this item belongs to, or null if "
+            "it genuinely needs one of its own"
+        ),
+    )
+    reasoning: str = Field(
+        description="One sentence: why this belongs where you have put it"
+    )
+    title: str = Field(description="What the committee would call this, e.g. 'A23 Streatham corridor'")
+    description: str = Field(
+        description="3-4 sentences: what it is, where it stands, why we are tracking it"
+    )
+    project_type: Literal[PROJECT_KINDS]
+    geographic_scope: Literal[SCOPES]
+    priority: Literal[PROJECT_PRIORITIES]
+    primary_locations: list[str]
+    next_action: str = Field(description="The single most useful next thing a volunteer could do")
+
+
+def suggest_project_for_item(item: dict, projects: list[dict]) -> ItemProjectProposal:
+    """Draft the project this one item would start, or name the one it joins.
+
+    `item` is a notion.item_detail() record. Always returns a full draft even
+    when it also names an existing match, so the person can disagree and start
+    the new one anyway without a second round trip.
+    """
+    existing = []
+    for pr in projects:
+        line = f"- {pr['title']}"
+        if pr.get("standing"):
+            line += "  [standing — exists to absorb every item on its subject]"
+        if pr.get("description"):
+            line += f"\n    {pr['description'][:300]}"
+        existing.append(line)
+
+    facts = "\n".join(
+        f"{label}: {value}"
+        for label, value in (
+            ("Title", item.get("title")),
+            ("Type", item.get("project_type")),
+            ("Locations", ", ".join(item.get("locations") or []) or "-"),
+            ("Tags", ", ".join(item.get("tags") or []) or "-"),
+            ("Arrived", item.get("received")),
+            ("Deadline", item.get("deadline")),
+        )
+        if value
+    )
+
+    response = _parse_resuming(
+        model=MODEL,
+        max_tokens=4000,
+        output_config={"effort": "medium"},
+        timeout=180.0,
+        system=VOICE,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"Today is {date.today().isoformat()}.\n\n"
+                    "Somebody is looking at one filed item and wants to start tracking "
+                    "the thing behind it as a project.\n\n"
+                    f"## The item\n{facts}\n\n"
+                    f"Summary: {(item.get('summary') or '(none)')[:1200]}\n\n"
+                    f"Key points: {(item.get('key_points') or '(none)')[:1200]}\n\n"
+                    f"## Projects we already track\n" + ("\n".join(existing) or "(none yet)") + "\n\n"
+                    "### What to do\n"
+                    "First, check whether it belongs to a project above. If it does, set "
+                    "matches_existing to that exact title. A standing project is a strong "
+                    "match for anything on its subject — that is what it is for.\n\n"
+                    "Either way, also draft the project this item would start on its own, "
+                    "so the person can overrule you. Name it after the scheme or corridor "
+                    "rather than after this one item: a project outlives the email that "
+                    "prompted it, and more post about the same scheme should sit under it "
+                    "comfortably. Prefer a name a committee member would recognise in a "
+                    "year's time.\n\n"
+                    "If the item is a notice about something the council will keep "
+                    "returning to, that is a project worth having. If it is a one-off with "
+                    "no future, say so in reasoning — but still give your best draft."
+                ),
+            }
+        ],
+        output_format=ItemProjectProposal,
+    )
+    return response.parsed_output

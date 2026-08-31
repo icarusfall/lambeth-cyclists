@@ -127,14 +127,14 @@ async def suggest(request: Request, user: str = Depends(require_user)):
     except Exception as e:
         logger.exception("Suggest stories failed")
         return templates.TemplateResponse(
-            request, "partials/_error.html", {"message": f"Suggesting stories failed: {e}"}
+            request, "partials/_error.html", {"error": f"Suggesting stories failed: {e}"}
         )
     if not stories:
         return templates.TemplateResponse(
             request,
             "partials/_error.html",
             {
-                "message": (
+                "error": (
                     "Nothing new to suggest beyond the stories already listed. "
                     "Tick “include stories we've already seen” to get the full "
                     "set of suggestions again."
@@ -156,14 +156,14 @@ async def scan_news(request: Request, user: str = Depends(require_user)):
     except Exception as e:
         logger.exception("News scan failed")
         return templates.TemplateResponse(
-            request, "partials/_error.html", {"message": f"News scan failed: {e}"}
+            request, "partials/_error.html", {"error": f"News scan failed: {e}"}
         )
     if not stories:
         return templates.TemplateResponse(
             request,
             "partials/_error.html",
             {
-                "message": (
+                "error": (
                     "News scan found nothing new beyond the stories already "
                     "listed. Tick “include stories we've already seen” to see "
                     "everything the scan can find."
@@ -190,7 +190,7 @@ async def draft(request: Request, user: str = Depends(require_user)):
         return templates.TemplateResponse(
             request,
             "partials/_error.html",
-            {"message": "Tick at least one story before drafting."},
+            {"error": "Tick at least one story before drafting."},
         )
     try:
         meetings_md = pages_to_md(notion.upcoming_meetings())
@@ -200,7 +200,7 @@ async def draft(request: Request, user: str = Depends(require_user)):
     except Exception as e:
         logger.exception("Draft newsletter failed")
         return templates.TemplateResponse(
-            request, "partials/_error.html", {"message": f"Drafting failed: {e}"}
+            request, "partials/_error.html", {"error": f"Drafting failed: {e}"}
         )
     return templates.TemplateResponse(
         request,
@@ -244,7 +244,7 @@ async def save(
     except Exception as e:
         logger.exception("Save draft failed")
         return templates.TemplateResponse(
-            request, "partials/_error.html", {"message": f"Saving to Notion failed: {e}"}
+            request, "partials/_error.html", {"error": f"Saving to Notion failed: {e}"}
         )
     return templates.TemplateResponse(
         request,
@@ -267,13 +267,13 @@ async def discard(request: Request, page_id: str, user: str = Depends(require_us
             return templates.TemplateResponse(
                 request,
                 "partials/_error.html",
-                {"message": "That newsletter has been sent — it stays in the archive."},
+                {"error": "That newsletter has been sent — it stays in the archive."},
             )
         notion.discard_newsletter(page_id)
     except Exception as e:
         logger.exception("Discard draft failed")
         return templates.TemplateResponse(
-            request, "partials/_error.html", {"message": f"Discarding failed: {e}"}
+            request, "partials/_error.html", {"error": f"Discarding failed: {e}"}
         )
     if request.headers.get("HX-Request"):
         return Response(status_code=200, headers={"HX-Redirect": "/archive"})
@@ -317,7 +317,7 @@ async def send_test(
     except Exception as e:
         logger.exception("Test send failed")
         return templates.TemplateResponse(
-            request, "partials/_error.html", {"message": f"Test send failed: {e}"}
+            request, "partials/_error.html", {"error": f"Test send failed: {e}"}
         )
     return Response(
         f'<p class="flash ok">Test sent to {test_email} — check how it looks on your phone.</p>',
@@ -336,7 +336,7 @@ async def send(
     for_lcc = bool(form.get("channel_lcc"))
     if not (to_group or for_lcc):
         return templates.TemplateResponse(
-            request, "partials/_error.html", {"message": "Pick at least one channel."}
+            request, "partials/_error.html", {"error": "Pick at least one channel."}
         )
 
     nl = notion.load_newsletter(page_id)
@@ -349,7 +349,7 @@ async def send(
             return templates.TemplateResponse(
                 request,
                 "partials/_error.html",
-                {"message": "GROUP_EMAIL isn't configured — can't send to the group."},
+                {"error": "GROUP_EMAIL isn't configured — can't send to the group."},
             )
         try:
             group_result = mailer.send_newsletter(
@@ -361,7 +361,7 @@ async def send(
             return templates.TemplateResponse(
                 request,
                 "partials/_error.html",
-                {"message": f"Sending to the group failed (nothing marked as sent): {e}"},
+                {"error": f"Sending to the group failed (nothing marked as sent): {e}"},
             )
 
     if for_lcc:
@@ -376,7 +376,7 @@ async def send(
             request,
             "partials/_error.html",
             {
-                "message": (
+                "error": (
                     f"Email was sent, but updating Notion failed: {e}. "
                     "Set the status manually in Notion."
                 )

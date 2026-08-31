@@ -53,8 +53,30 @@
   {% endif %}
 </div>
 
+{# ---------- Where this is filed ---------- #}
 {% if item.project %}
 <p class="small">Part of <a href="/work/{{ item.project.id }}"><strong>{{ item.project.title }}</strong></a></p>
+{% else %}
+<div class="card slim filing-box" id="filing">
+  <span class="muted">This isn&rsquo;t filed under anything yet.</span>
+
+  <form hx-post="/items/{{ item.id }}/project" class="filing-quick">
+    <select name="existing_id" required>
+      <option value="">file it under&hellip;</option>
+      {% for p in projects %}
+      <option value="{{ p.id }}">{{ p.title }}{% if p.standing %} (ongoing){% endif %}</option>
+      {% endfor %}
+    </select>
+    <button class="btn small-btn" type="submit">Add</button>
+  </form>
+
+  <form hx-post="/items/{{ item.id }}/project/suggest"
+        hx-target="#new-project" hx-swap="innerHTML" hx-indicator="#thinking-project">
+    <button class="btn primary small-btn" type="submit">Start a project around this</button>
+  </form>
+  <span id="thinking-project" class="htmx-indicator spinner">reading it&hellip;</span>
+</div>
+<div id="new-project"></div>
 {% endif %}
 
 {# ---------- What it says ---------- #}

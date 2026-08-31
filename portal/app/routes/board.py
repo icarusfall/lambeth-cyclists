@@ -207,12 +207,20 @@ async def item_page(request: Request, page_id: str, user: str = Depends(require_
             status_code=404,
         )
     comments, comment_error = _comments(page_id)
+    # For the "file it under..." dropdown. Not fatal: without it the page
+    # still reads, it just cannot file.
+    try:
+        projects = notion.projects_for_matching()
+    except Exception:
+        logger.exception("Could not list projects for item %s", page_id)
+        projects = []
     return templates.TemplateResponse(
         request,
         "item_detail.html",
         {
             "user": user,
             "item": item,
+            "projects": projects,
             "error": None,
             "back": back,
             "comments": comments,
