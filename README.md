@@ -56,7 +56,15 @@ Python 3.10+. One dependency set for everything:
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
+pip install -e .
 ```
+
+That second line puts the shared `core/` package on the path, so each service
+can `import core.*` while running from its own directory. It is deliberately
+not in `requirements.txt`: Railway's builder copies only `pyproject.toml` and
+`requirements.txt` into the install layer, so an editable install there runs
+before `core/` exists and fails. Railway sets `PYTHONPATH=/app` instead. Tests
+need neither - `pytest` runs from the repo root.
 
 Each service runs from its own directory, which is also how Railway starts them:
 

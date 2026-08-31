@@ -5,10 +5,18 @@
 # few seconds of build time in exchange for never again having the same
 # library at two versions in two places — which is exactly how the processor
 # ended up a major version behind on notion-client.
-
-# The shared core/ package, installed from pyproject.toml so the services
-# can import it while running from their own directories.
--e .
+#
+# `-e .` used to be the first entry here, to make the shared core/ package
+# importable from each service's own directory. It cannot work on Railway:
+# railpack copies only pyproject.toml and requirements.txt into the install
+# layer for caching, so `pip install -e .` runs before core/ exists and fails
+# with "package directory 'core' does not exist". Every deploy failed that way
+# while Railway went on serving the last good build.
+#
+# core/ is now put on the path instead, which needs no install step:
+#   Railway  PYTHONPATH=/app as a service variable
+#   locally  the repo root is already the working directory for pytest, and
+#            `pip install -e .` still works if you want it in your venv
 
 # --- Shared ---
 # Notion: v3 data-sources API, used by all three services.

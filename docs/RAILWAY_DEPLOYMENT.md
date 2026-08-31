@@ -79,6 +79,25 @@ every deploy, still serving the old separate-repo build.
 If a service looks like it is ignoring your pushes, check Deployments for
 failures before assuming the source is wrong.
 
+Every service also needs one variable that is not a secret:
+
+```
+PYTHONPATH=/app
+```
+
+Without it the service builds, starts, dies on `ModuleNotFoundError: No module
+named 'core'`, and you are back to Railway serving the last good build. `/app`
+is where Railway puts the repo; the start command `cd`s below it, so the root
+has to be on the path explicitly.
+
+It is `PYTHONPATH` rather than `pip install -e .` because the builder
+(railpack) copies **only** `pyproject.toml` and `requirements.txt` into the
+install layer for caching. An editable install therefore runs before `core/`
+has been copied, and dies with `package directory 'core' does not exist` - so
+`-e .` can never work under this builder, however the rest is configured.
+Locally the whole tree is present, so `pip install -e .` works there and the
+README uses it.
+
 **Leave Root Directory unset (the repo root).** It is tempting to point each
 service at its own subdirectory, but `requirements.txt` and `pyproject.toml`
 live at the **repo root** - one dependency set for everything, which is what
