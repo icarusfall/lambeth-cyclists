@@ -121,8 +121,9 @@ GMAIL_CLIENT_SECRET=GOCSPX-your-client-secret
 GMAIL_REFRESH_TOKEN=your-refresh-token-from-get-refresh-token-script
 GMAIL_LABEL=Lambeth Cycling Projects
 
-# Claude API
-CLAUDE_API_KEY=sk-ant-your-claude-api-key
+# Claude API. Use this name: core/cyclebot.py reads it directly, and the
+# services accept CLAUDE_API_KEY only as a legacy alias.
+ANTHROPIC_API_KEY=sk-ant-your-claude-api-key
 
 # Notion API
 NOTION_API_KEY=secret_your-notion-integration-key

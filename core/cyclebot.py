@@ -834,9 +834,23 @@ def run_tool(name: str, arguments: dict) -> str:
         return f"Error running {name}: {e}"
 
 
+# The two services read their key through pydantic settings, which accept
+# either name. This is the one reader that does not go through them, and it
+# used to index os.environ directly — so a deployment set up from the docs,
+# which said CLAUDE_API_KEY, ran a working processor and a working portal
+# with a chat page that died on a bare KeyError.
+_KEY_NAMES = ("ANTHROPIC_API_KEY", "CLAUDE_API_KEY")
+
+
 @lru_cache
 def _anthropic() -> anthropic.Anthropic:
-    return anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    for name in _KEY_NAMES:
+        key = os.environ.get(name)
+        if key:
+            return anthropic.Anthropic(api_key=key)
+    raise RuntimeError(
+        "CycleBot needs an Anthropic key: set " + " or ".join(_KEY_NAMES) + "."
+    )
 
 
 def answer(
