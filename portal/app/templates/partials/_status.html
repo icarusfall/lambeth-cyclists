@@ -17,7 +17,7 @@
   {% if error %}<span class="flash err small">{{ error }}</span>{% endif %}
 
   <details class="status-change">
-    <summary class="muted small">Change this</summary>
+    <summary class="disclosure-btn">Change status</summary>
     <form hx-post="/work/{{ p.id }}/status" hx-target="#status" hx-swap="outerHTML">
       {% for key, label, when in statuses %}
       <label class="inline status-option">

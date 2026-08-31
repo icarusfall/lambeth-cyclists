@@ -10,7 +10,7 @@
     <p>{{ p.help_needed }}</p>
     {% if saved %}<p class="flash ok small">Saved.</p>{% endif %}
     <details class="help-edit">
-      <summary class="muted small">Change this</summary>
+      <summary class="disclosure-btn">Change what help is needed</summary>
       {% include "partials/_help_needed_form.html" %}
     </details>
   </div>
@@ -18,7 +18,7 @@
   {# Work that has stopped does not need a hand. #}
   {% else %}
   <details class="card help-empty">
-    <summary class="muted small">Say what someone could help with here</summary>
+    <summary class="disclosure-btn">Say what someone could help with</summary>
     <p class="muted small">
       One or two plain sentences. &ldquo;Someone to read the concept designs
       when they land in the autumn and say whether cycling has been squeezed

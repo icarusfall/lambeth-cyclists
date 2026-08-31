@@ -378,3 +378,30 @@ a.item-title:hover { text-decoration: underline; }
 .closed-row { display: block; text-decoration: none; color: var(--text); opacity: 0.85; }
 .closed-row:hover { border-color: var(--green); opacity: 1; }
 .closed-row:hover .pile-title { text-decoration: underline; }
+
+/* A <details> summary that has to read as a control, not a caption.
+
+   The status disclosure was styled `muted small` and went unfound by the only
+   person who needed it: on a page a guest also reads, an editing control still
+   has to look like one. */
+.disclosure-btn {
+  display: inline-block;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--text);
+}
+.disclosure-btn::-webkit-details-marker { display: none; }
+.disclosure-btn::after { content: " \25be"; color: var(--muted); }
+.disclosure-btn:hover { border-color: var(--green); }
+details[open] > .disclosure-btn { border-color: var(--green); margin-bottom: 8px; }
+details[open] > .disclosure-btn::after { content: " \25b4"; }
+
+/* The status row is the page's main control; give it presence. */
+.status-box { gap: 10px; }
+.status-box .status-change { width: auto; margin: 0 0 0 auto; }
+.status-box[open] { display: block; }
