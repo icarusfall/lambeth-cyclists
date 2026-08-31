@@ -101,11 +101,14 @@ pytest
 ## Where things came from
 
 This started as three repos, merged in August 2026. The full history lives in
-the archived originals:
+the archived originals, all read-only on GitHub and kept locally in
+`../archive`:
 
-- `icarusfall/lambeth-cyclists-email-processor`
-- `icarusfall/lambeth-cyclists-portal`
-- `icarusfall/lambeth-cyclists-mcp`
+- `icarusfall/lambeth-cyclists-email-processor` — now `processor/`
+- `icarusfall/lambeth-cyclists-portal` — now `portal/`
+- `icarusfall/lambeth-cyclists-mcp` — now `mcp/`
+- `icarusfall/cyclebot` — a Next.js chat front end on Vercel, never part of the
+  merge and retired on 31 August 2026; the portal's `/chat` page replaced it
 
 Anything here that looks arbitrary probably has a commit message explaining it
 in one of those. [CLAUDE.md](CLAUDE.md) carries the current state and the known
