@@ -60,31 +60,47 @@ apps in one repo, Railway needs to be told which one each service is.
 
 ### 2.3 Configure Each Service
 
-Each service has its own config file at the repo root:
+Set a **Custom Start Command** per service in **Settings -> Deploy**:
 
-| Service | Config file | Runs |
-|---|---|---|
-| processor | `railway.processor.json` | `cd processor && python main.py` |
-| portal | `railway.portal.json` | `cd portal && uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
-| mcp | `railway.mcp.json` | `cd mcp && python server.py` |
+| Service | Custom Start Command |
+|---|---|
+| processor | `cd processor && python main.py` |
+| portal | `cd portal && uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| mcp | `cd mcp && python server.py` |
 
-In each Railway service: **Settings → Config-as-code → Config file path**, set
-to the matching filename above.
+**This is not optional.** There is no `Procfile` and no `railway.json` in this
+repo, so without a start command Nixpacks builds successfully and then has
+nothing to run. The failure mode is nasty: the deploy fails, Railway keeps
+serving the **last good build**, and the service looks healthy while running
+code from before the merge. That is exactly what happened to the portal on
+31 August 2026 - it had been pointed at this repo for a while, quietly failing
+every deploy, still serving the old separate-repo build.
 
-**Leave Root Directory unset (the repo root).** This is the part that is easy
-to get wrong: it is tempting to point each service at its own subdirectory, but
-`requirements.txt` and `pyproject.toml` live at the **repo root** - one
-dependency set for everything, which is what stopped the processor sitting a
-major version behind on `notion-client`. Point Root Directory at `portal/` and
-the build finds no `requirements.txt` and fails.
+If a service looks like it is ignoring your pushes, check Deployments for
+failures before assuming the source is wrong.
 
-So the build always runs from the root, and the start command `cd`s into the
+**Leave Root Directory unset (the repo root).** It is tempting to point each
+service at its own subdirectory, but `requirements.txt` and `pyproject.toml`
+live at the **repo root** - one dependency set for everything, which is what
+stopped the processor sitting a major version behind on `notion-client`. Point
+Root Directory at `portal/` and the build finds no `requirements.txt` and
+fails.
+
+So the build always runs from the root and the start command `cd`s into the
 service. That is also what makes `-e .` work: it installs the shared `core`
 package in editable mode, which is how each service imports `core.*` while
 running from its own directory.
 
-Restart policy is set in the config files (on failure; 10 retries for the
-processor, 3 for the web services).
+Set the restart policy per service too: on failure, 10 retries for the
+processor, 3 for the web services.
+
+> **On config files.** Railway's Config as Code (`railway.json` / `railway.toml`)
+> is deprecated in favour of Infrastructure as Code (`.railway/railway.ts`).
+> This repo deliberately has neither: the settings above are few enough to hold
+> in the dashboard, and adopting IaC means one file describing every service,
+> which is worth doing deliberately rather than during an outage. If you migrate
+> later, `railway config migrate --apply` generates it, and the per-service
+> Config File Path must then be cleared so there is one source of truth.
 
 **`mcp` no longer needs deploying.** Since 30 August 2026 the portal's chat
 runs CycleBot's tools in-process via `core.cyclebot`, and the only other
