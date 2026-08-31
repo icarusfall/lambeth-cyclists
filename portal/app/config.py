@@ -7,7 +7,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # Two files, root first so the service's own wins. Now that this is one
+    # repo, a key several services share — Notion, Anthropic, Mapbox — sensibly
+    # lives in the root .env rather than being copied into each. On Railway
+    # neither file exists and everything comes from service variables.
+    model_config = SettingsConfigDict(
+        env_file=("../.env", ".env"), extra="ignore"
+    )
 
     # Auth
     session_secret: str = "dev-secret-change-me"
@@ -20,6 +26,12 @@ class Settings(BaseSettings):
     notion_projects_db: str = Field(default="2e42d7a2437880d686e8ff554556b0c1", validation_alias=AliasChoices("NOTION_PROJECTS_DB", "NOTION_PROJECTS_DB_ID"))
     notion_newsletters_db: str = ""
     notion_users_db: str = ""
+
+    # Maps. A Mapbox "pk." token is public by design — it is embedded in the
+    # page and readable by every visitor — so it is restricted by URL at
+    # Mapbox rather than kept secret here. Unset just means no map: every
+    # page that shows one works without it.
+    mapbox_token: str = Field(default="", validation_alias=AliasChoices("MAPBOX_TOKEN", "MAPBOX_ACCESS_TOKEN"))
 
     # AI
     anthropic_api_key: str = Field(default="", validation_alias=AliasChoices("ANTHROPIC_API_KEY", "CLAUDE_API_KEY"))

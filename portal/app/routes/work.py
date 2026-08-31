@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Form, Request
 
 from app import notion
 from app.auth import require_user
+from app.config import get_settings
 from app.web import templates
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,15 @@ async def work(request: Request, user: str = Depends(require_user)):
     except Exception as e:
         logger.exception("Loading the work overview failed")
         error = f"Couldn't load our projects from Notion: {e}"
+
+    # Never fatal. A map that fails to build should cost you the map, not the
+    # page it sits on.
+    map_data = None
+    try:
+        map_data = notion.map_points()
+    except Exception:
+        logger.exception("Building the map failed")
+
     return templates.TemplateResponse(
         request,
         "work.html",
@@ -40,6 +50,8 @@ async def work(request: Request, user: str = Depends(require_user)):
             "projects": [p for p in projects if not p["standing"]],
             "standing": [p for p in projects if p["standing"]],
             "error": error,
+            "map": map_data,
+            "mapbox_token": get_settings().mapbox_token,
         },
     )
 
@@ -74,6 +86,12 @@ async def project(request: Request, page_id: str, user: str = Depends(require_us
             status_code=404,
         )
     comments, comment_error = _comments(page_id)
+    map_data = None
+    try:
+        map_data = notion.map_points(project_id=page_id)
+    except Exception:
+        logger.exception("Building the map for %s failed", page_id)
+
     return templates.TemplateResponse(
         request,
         "project.html",
@@ -84,6 +102,8 @@ async def project(request: Request, page_id: str, user: str = Depends(require_us
             "comments": comments,
             "comment_error": comment_error,
             "comment_target": f"/work/{page_id}/comment",
+            "map": map_data,
+            "mapbox_token": get_settings().mapbox_token,
         },
     )
 

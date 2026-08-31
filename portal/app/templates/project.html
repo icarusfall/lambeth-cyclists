@@ -77,6 +77,10 @@
   {% endif %}
 </section>
 
+{% with map_title = "On the map", map_note = "Where this piece of work touches the borough." %}
+  {% include "partials/_map.html" %}
+{% endwith %}
+
 {% include "partials/_comments.html" %}
 
 <p class="muted small admin-only"><a href="{{ p.url }}" target="_blank">Open in Notion</a></p>

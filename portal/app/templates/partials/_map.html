@@ -1,0 +1,135 @@
+{# A map of what we have been sent about, one pin per place.
+
+   Renders nothing at all without a Mapbox token, so every page that includes
+   it works whether or not MAPBOX_TOKEN is set. The token is a public "pk."
+   one — it is in the page source by design and restricted by URL at Mapbox
+   rather than kept secret.
+
+   Expects: map.points, map.unlocated, map.item_count, mapbox_token, and an
+   optional map_note. #}
+{% if mapbox_token and map and map.points %}
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
+<section class="map-section">
+  <div class="section-head">
+    <h2>{{ map_title or "Where things are happening" }}</h2>
+    <span class="muted small">{{ map.points|length }} location{{ 's' if map.points|length != 1 }}</span>
+  </div>
+
+  <div id="map" class="map"></div>
+
+  <p class="muted small map-note">
+    {{ map_note or "Every street, junction and scheme we have been written to about. Click a pin to see what it was." }}
+    {% if map.unlocated %}
+      <strong>{{ map.unlocated }}</strong> of the {{ map.item_count }} filed
+      {{ 'item has' if map.unlocated == 1 else 'items have' }} no location on
+      file and {{ 'is' if map.unlocated == 1 else 'are' }} not shown.
+    {% endif %}
+  </p>
+</section>
+
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
+<script>
+(function () {
+  const points = {{ map.points|tojson }};
+  if (!points.length || typeof mapboxgl === 'undefined') return;
+
+  mapboxgl.accessToken = {{ mapbox_token|tojson }};
+  const map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/mapbox/light-v11',
+    cooperativeGestures: true,   // a phone scrolling past the map shouldn't get trapped in it
+  });
+  map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+  const bounds = new mapboxgl.LngLatBounds();
+  points.forEach(p => bounds.extend([p.lng, p.lat]));
+
+  // A map built while its container has no width — a background tab, a
+  // collapsed pane, a phone rotating — keeps the 2px canvas it was given and
+  // never recovers on its own. Re-fit whenever the box actually changes size.
+  let fitted = false;
+  const settle = () => {
+    const el = document.getElementById('map');
+    if (!el || !el.clientWidth) return;
+    map.resize();
+    if (!fitted) {
+      map.fitBounds(bounds, {padding: 48, maxZoom: 14, duration: 0});
+      fitted = true;
+    }
+  };
+  new ResizeObserver(settle).observe(document.getElementById('map'));
+  settle();
+
+  map.on('load', () => {
+    map.addSource('filed', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: points.map((p, i) => ({
+          type: 'Feature',
+          id: i,
+          geometry: {type: 'Point', coordinates: [p.lng, p.lat]},
+          properties: p,
+        })),
+      },
+    });
+    map.addLayer({
+      id: 'filed-halo',
+      type: 'circle',
+      source: 'filed',
+      paint: {
+        'circle-radius': 11,
+        'circle-color': '#1a7a3c',
+        'circle-opacity': 0.16,
+      },
+    });
+    map.addLayer({
+      id: 'filed-dot',
+      type: 'circle',
+      source: 'filed',
+      paint: {
+        'circle-radius': 5,
+        'circle-color': '#1a7a3c',
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#ffffff',
+      },
+    });
+
+    map.on('mouseenter', 'filed-dot', () => { map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', 'filed-dot', () => { map.getCanvas().style.cursor = ''; });
+
+    map.on('click', 'filed-dot', (e) => {
+      // Several items often share one coordinate — three emails about the same
+      // velodrome event, say — so show everything under the click, not just
+      // whichever happened to be drawn on top.
+      const here = map.queryRenderedFeatures(e.point, {layers: ['filed-dot']});
+      const seen = new Set();
+      const rows = [];
+      here.forEach(f => {
+        const p = f.properties;
+        const key = p.id + '|' + p.place;
+        if (seen.has(key)) return;
+        seen.add(key);
+        rows.push(
+          '<li><a href="/items/' + p.id + '">' + esc(p.title) + '</a>' +
+          (p.project ? '<span class="pop-project">' + esc(p.project) + '</span>' : '') +
+          '</li>'
+        );
+      });
+      new mapboxgl.Popup({maxWidth: '300px'})
+        .setLngLat(here[0].geometry.coordinates)
+        .setHTML(
+          '<strong>' + esc(here[0].properties.place || 'Here') + '</strong>' +
+          '<ul class="pop-list">' + rows.join('') + '</ul>'
+        )
+        .addTo(map);
+    });
+  });
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+})();
+</script>
+{% endif %}

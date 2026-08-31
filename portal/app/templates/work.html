@@ -21,6 +21,8 @@
 </div>
 {% endif %}
 
+{% include "partials/_map.html" %}
+
 {% macro project_card(p, muted=False) %}
 <a class="card work-card{{ ' quiet' if muted }} type-{{ p.type or 'other' }}" href="/work/{{ p.id }}">
   <span class="work-head">

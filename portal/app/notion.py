@@ -7,6 +7,7 @@ queries and writes.
 
 import json
 import logging
+import re
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 
@@ -905,6 +906,139 @@ def ways_to_help() -> list[dict]:
     out = [p for p in projects if p["help_needed"] or not p["lead"]]
     out.sort(key=lambda p: (not p["help_needed"], p["standing"], p["title"].lower()))
     return out
+
+
+# ---------------------------------------------------------------------------
+# Where things are
+# ---------------------------------------------------------------------------
+# The processor geocodes each item's locations and writes the results as a
+# JSON array into "Geocoded Coordinates". That property is rich_text, which
+# Notion caps at 2000 characters per chunk, so an item with many locations
+# has its JSON cut off mid-object and will not parse. Five of ours are in
+# that state today.
+#
+# Losing every point on an item because its last one was truncated would be
+# a poor trade, so a failed parse falls back to salvaging whole objects with
+# a regex. The proper fix belongs in the processor, which should chunk the
+# value rather than let Notion clip it.
+
+_GEO_OBJECT = re.compile(r"\{[^{}]*\}")
+
+
+def _geocodes(raw_value: str) -> list[dict]:
+    """Every place on an item that we have a real coordinate for."""
+    value = (raw_value or "").strip()
+    if not value:
+        return []
+
+    entries = []
+    try:
+        parsed = json.loads(value)
+        entries = parsed if isinstance(parsed, list) else []
+    except (ValueError, TypeError):
+        for chunk in _GEO_OBJECT.findall(value):
+            try:
+                entries.append(json.loads(chunk))
+            except (ValueError, TypeError):
+                continue
+
+    places = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        lat, lng = entry.get("lat"), entry.get("lng")
+        if not isinstance(lat, (int, float)) or not isinstance(lng, (int, float)):
+            continue
+        places.append(
+            {
+                "name": entry.get("name") or entry.get("formatted_address") or "",
+                "address": entry.get("formatted_address") or "",
+                "lat": float(lat),
+                "lng": float(lng),
+            }
+        )
+    return places
+
+
+def _gazetteer(rows: list[dict]) -> dict[str, tuple[float, float]]:
+    """Place name -> coordinate, learned from whatever has been geocoded.
+
+    Items added by hand through the portal never get geocoded — only the
+    email processor does that — so they carry location names and nothing to
+    plot. Most of those names have already been geocoded on some other item,
+    which is enough to put a rough pin on the map. It is a stopgap: the real
+    fix is for create_item to geocode like the processor does.
+    """
+    gaz = {}
+    for raw in rows:
+        blob = rich_text_to_str(
+            raw["properties"].get("Geocoded Coordinates", {}).get("rich_text", [])
+        )
+        for place in _geocodes(blob):
+            gaz.setdefault(place["name"].strip().lower(), (place["lat"], place["lng"]))
+    return gaz
+
+
+def map_points(project_id: str | None = None, limit: int = 100) -> dict:
+    """Everything we hold a coordinate for, as one point per place.
+
+    An item naming five streets is five points: the whole use of the map is
+    to answer "is anything happening near me", and collapsing a scheme to one
+    pin loses exactly the street somebody is looking for.
+
+    Returns the points and a count of items we could not place, because a map
+    that quietly omits a third of the work reads as though that work does not
+    exist.
+    """
+    everything = query(get_settings().notion_items_db, limit=100)
+    gaz = _gazetteer(everything)
+
+    if project_id:
+        rows = query(
+            get_settings().notion_items_db,
+            filter_obj={"property": "Related Project", "relation": {"contains": project_id}},
+            limit=limit,
+        )
+        titles = {}
+    else:
+        rows = everything[:limit]
+        titles = {p["id"]: get_page_title(p) for p in query(get_settings().notion_projects_db, limit=60)}
+
+    points, unlocated = [], 0
+    for raw in rows:
+        props = raw.get("properties", {})
+        places = _geocodes(
+            rich_text_to_str(props.get("Geocoded Coordinates", {}).get("rich_text", []))
+        )
+        if not places:
+            # Fall back to names we have seen a coordinate for elsewhere.
+            for option in props.get("Locations", {}).get("multi_select", []):
+                found = gaz.get(option["name"].strip().lower())
+                if found:
+                    places.append({"name": option["name"], "lat": found[0], "lng": found[1]})
+        if not places:
+            unlocated += 1
+            continue
+
+        related = props.get("Related Project", {}).get("relation", [])
+        project = titles.get(related[0]["id"]) if related else None
+        received = get_date_prop(raw, "Date Received")
+        for place in places:
+            points.append(
+                {
+                    "id": raw["id"],
+                    "title": get_page_title(raw),
+                    "place": place["name"],
+                    "lat": place["lat"],
+                    "lng": place["lng"],
+                    "project": project,
+                    "received": received.isoformat() if received else None,
+                }
+            )
+
+    # Not "items": Jinja resolves foo.items to dict.items, the method, and
+    # renders it as a bound-method repr in the middle of a sentence.
+    return {"points": points, "unlocated": unlocated, "item_count": len(rows)}
 
 
 # ---------------------------------------------------------------------------
