@@ -3,8 +3,10 @@
 > Last reviewed: **31 August 2026**. Earlier revisions described three separate
 > repos; they were merged into this one on 30 August, and both services were
 > deployed from the merged repo on 31 August. **The consolidation is complete.**
-> Items marked **[UNCONFIRMED]** need Charlie to verify — do not treat them as
-> fact.
+> The portal was reshaped around the work rather than the inbox later the same
+> day — see [`portal/`](#portal) — because the next job is making it fit to
+> show a stranger. Items marked **[UNCONFIRMED]** need Charlie to verify — do
+> not treat them as fact.
 
 ## The Problem
 
@@ -24,7 +26,7 @@ undocumented context.
 | Directory | What it is | Runs as | Interaction model |
 |---|---|---|---|
 | `processor/` | Email processor. Watches Gmail, extracts structured data with Claude, files it into Notion, generates meeting agendas, sends reminders. | Railway worker | Autonomous daemon, 24/7 |
-| `portal/` | Members' portal at **members.lambethcyclists.com**. Dashboard, triage, newsletter builder, archive, chat. | Railway web | On-demand only — every AI call is a button press |
+| `portal/` | Members' portal at **members.lambethcyclists.com**. What we're working on, where you could help, a map, discussion, newsletter builder, triage, archive, chat. | Railway web | On-demand only — every AI call is a button press |
 | `mcp/` | CycleBot over MCP: a ~130-line facade over `core.cyclebot`, for MCP clients. | not deployed | no callers since the Vercel app was retired |
 | `core/` | Shared by all of them: how we call Claude, read Notion, send mail, and answer questions. | library | — |
 
@@ -42,8 +44,9 @@ names. Anything used by more than one service belongs there.
 | `core/mail.py` | Resend sending; raises, and each caller decides what that means |
 | `core/cyclebot.py` | the CycleBot agent: ten read-only Notion tools, system prompt, loop |
 
-One `requirements.txt` at the root installs everything for every service, plus
-`core` in editable mode. Both Railway services build from it.
+One `requirements.txt` at the root installs everything for every service. Both
+Railway services build from it. It does **not** install `core` — see
+[Deployment](#deployment) for why `-e .` cannot work on Railway.
 
 Two things deploy: `processor/` (worker) and `portal/` (web). `mcp/` is kept in
 the repo as the one way a third-party MCP client could reach CycleBot, but has
@@ -108,15 +111,98 @@ Email sending is **Resend**, not SMTP, via `core.mail`. `docs/` was rewritten on
 
 ### `portal/`
 
-FastAPI + Jinja2 + htmx, phone-friendly, login-protected. Newsletter builder:
-gather (AI suggestions from Notion + a live web news scan) → draft → send
-(Resend to the Google Group, plus copy-paste HTML for the LCC messaging system).
-Self-service passwords via a Notion Portal Users DB.
+FastAPI + Jinja2 + htmx, phone-friendly, login-protected. No build step and no
+JavaScript framework: pages are server-rendered and htmx swaps fragments in
+place.
 
-The chat page calls `core.cyclebot.answer()` **in this process**. It used to go
-out through the Anthropic MCP connector to the Railway MCP server — meaning
+**It is organised around the work, not around the post that arrives about it.**
+That is the one thing to understand before changing anything here. A
+coordinator wants an inbox to sort; somebody who joined last week wants to know
+what is going on and where they might fit. Until 31 August 2026 the site only
+served the first, and opened on the triage queue — which that day contained a
+single card, and that card was a volunteer offering to help.
+
+So a **project** is the unit of browsing, and the items filed under it are its
+paper trail, seen only in that context. "Items" and "projects" are Notion's
+words for Charlie's filing; the site avoids both. Nobody joining should have to
+learn them.
+
+| Route | What it is | Who it is for |
+|---|---|---|
+| `/` | *What we're working on* — the project cards, plus a borough map | anyone, first visit |
+| `/work/{id}` | one piece of work: where it's up to, who leads it, what help it wants, what has come in, discussion | anyone |
+| `/help` | *Where you could help* — work that has said what it needs, then anything closing soon | a new helper |
+| `/desk` | the old dashboard: needs-someone board, your items, next meeting, pipeline health | the coordinator |
+| `/triage` | sorting the pile | the coordinator |
+| `/newsletter`, `/archive`, `/chat`, `/items/*`, `/account` | as before | mixed |
+
+Nav shows five links and hides the machinery behind **More**, for the same
+reason.
+
+**Discussion** is Notion's own page comments (`client.comments`), on both
+projects and items — not a sixth database, so a conversation started in the
+portal is the one Charlie sees in Notion. Everything posts as the integration,
+so the author's name is written in as a **bold first run** and parsed back off
+it in `_read_comment`. Notion's API cannot delete a comment; only a person, in
+Notion, can, and the form says so before anyone presses the button.
+
+**Sorting the pile** has two paths. The tick-list with a sticky action bar is
+the fast one and the default — most of what arrives is routine post belonging
+to nothing, and ticking thirty titles beats waiting on a model. `propose_projects`
+still reads the whole pile at once for the cases where it earns its keep, which
+is spotting that five separate emails are the same scheme.
+
+**Newsletter builder:** gather (AI suggestions from Notion + a live web news
+scan) → draft → send (Resend to the Google Group, plus copy-paste HTML for the
+LCC messaging system). Self-service passwords via a Notion Portal Users DB.
+
+The **chat** page calls `core.cyclebot.answer()` **in this process**. It used to
+go out through the Anthropic MCP connector to the Railway MCP server — meaning
 Anthropic's servers called our tools over the public internet, which is why that
 server needs a bearer key. Same tools now, no round trip, no key.
+
+#### Things that will bite you
+
+**The two relations are not synced.** `Projects."Related Items"` and
+`Items."Related Project"` are separate one-way properties pointing at each
+other's database. Attaching an item writes only the item's side, so every
+project reads as having no items. Counts and lists come from querying Items
+filtered by `Related Project` — never from the project's own relation.
+
+**`Lead` and `Help Needed` are ours, and optional.** Projects already had `Lead
+Volunteer` and `Committee Members`, but both are Notion `people` properties and
+writing to them needs a workspace seat. Portal users do not have one, and
+leading on a consultation should not require it. So `Lead` is a select holding
+the portal name, exactly as `Owner` works on Items. Added by
+`scripts/add_project_help_fields.py` (dry-run by default, `--apply` to write).
+`Help Needed` is prose, because "help needed" is not something anybody can say
+yes to and "someone to read the concept designs when they land" is.
+
+**Maps are optional.** `MAPBOX_TOKEN` unset means no map and every page
+otherwise unchanged. The token is a public `pk.` one — readable in the page
+source by design, protected by URL restriction at Mapbox. **Use a separate
+token for local development:** a token that also permits localhost is not
+restricted at all, since anyone can copy it out of the page and serve from
+their own.
+
+**Geocoding is the processor's job, and it has two gaps.** Items added by hand
+through `/items/new` are never geocoded, so they carry location names and
+nothing to plot; the map resolves those names against places already geocoded
+on other items, which is a stopgap covering roughly a fifth of them. And five
+items have `Geocoded Coordinates` clipped at exactly 2000 characters, because
+the processor writes more JSON than Notion's `rich_text` cap allows and it cuts
+mid-object — `_geocodes` salvages whole objects with a regex when the parse
+fails. Both proper fixes belong in the processor. Every map states how many of
+its items it could not place, because a map that quietly drops what it cannot
+locate reads as though that work does not exist.
+
+**Settings read two `.env` files**, `("../.env", ".env")`, root first so the
+service's own wins. A key several services share can live once at the repo
+root. On Railway neither file exists and everything comes from service
+variables.
+
+**There are no tests.** Every other service has some; this one has none, and it
+now carries the most logic.
 
 ### `mcp/` (CycleBot over MCP)
 
@@ -166,7 +252,9 @@ this repo has not adopted — see [docs/RAILWAY_DEPLOYMENT.md](docs/RAILWAY_DEPL
 ## Costs
 
 Roughly **$2–5/month**: Railway within free credit, Claude API a few dollars,
-Google Maps within free credit, Gmail and Notion free. This replaced a Zapier
+Google Maps and Mapbox within free credit (Mapbox gives 50,000 map loads a
+month; a portal with a handful of users will not approach it), Gmail and Notion
+free. This replaced a Zapier
 subscription (Zapier only handled one attachment per email).
 
 Whether the Zapier account was ever actually cancelled is **[UNCONFIRMED]** — it
@@ -225,15 +313,23 @@ Ordered roughly by how much pain they cause:
    be worse — but it means a broken pipeline looks like a quiet one. The
    portal dashboard now says so, and the item detail page marks affected items
    as never read. Nothing yet pushes that to anyone who is not looking.
-4. **Projects are thinly populated.** The triager exists and the standing
-   sweeps exist, but most of the backlog has not been through them, so the
-   Projects database does not yet reflect what the group is actually working
-   on.
-5. **Two Anthropic console keys** under two names, both live. Aliased so
+4. **Everyone with a login can read everything.** There is no per-item
+   visibility, and filed items are member correspondence — real names, real
+   email addresses, sometimes complaints about neighbours. That was fine while
+   the only users were Charlie and Colin. It is the open question now that the
+   point of the portal is to hand logins to people who have just volunteered.
+   Charlie is checking LCC policy and asking the committee before anyone else
+   is added. **Do not treat "the portal is ready" as "invite people".**
+5. **Projects are thinly populated.** The triager exists, the standing sweeps
+   exist, and sorting is now a five-minute tick-list rather than a wait on a
+   model — but most of the backlog has not been through it, so the Projects
+   database does not yet reflect what the group is working on. This is the
+   one thing that makes the new front page look emptier than the group is.
+6. **Two Anthropic console keys** under two names, both live. Aliased so
    either resolves, but usage is split across two lines on the bill.
-6. **Local Python is 3.10, Railway builds on 3.13.** Everything works on both,
+7. **Local Python is 3.10, Railway builds on 3.13.** Everything works on both,
    but they are far enough apart that a dependency could behave differently.
-7. **Wards/Councillors data is post-election.** Built for the May 2026 Lambeth
+8. **Wards/Councillors data is post-election.** Built for the May 2026 Lambeth
    council elections, which have passed. `get_battleground_wards` in particular
    answers a question nobody is asking now. Whether this becomes a "who
    represents each ward" reference or goes is open. **[UNCONFIRMED]**
@@ -265,6 +361,14 @@ sense with them in mind:
   `EmailService()` raised `NameError` whenever `RESEND_API_KEY` was set — i.e.
   in every deployment that could actually send. There were no tests for that
   service; there are now.
+- The portal opened on the triage queue, which is a coordinator's page. On the
+  day it was rewritten that queue showed one card, and the card was somebody
+  volunteering to help. See [`portal/`](#portal).
+- Five items' geocode JSON was silently truncated at exactly 2000 characters by
+  Notion's `rich_text` cap, so it would not parse and those items had no
+  location at all. The portal salvages what it can; **the processor still
+  writes them that way** and should chunk the value the way `_body_blocks` does
+  for newsletter bodies. Not fixed, only worked around.
 
 ---
 
