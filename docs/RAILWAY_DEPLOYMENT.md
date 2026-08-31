@@ -60,23 +60,31 @@ apps in one repo, Railway needs to be told which one each service is.
 
 ### 2.3 Configure Each Service
 
-There is **no `railway.json`** in this repo - set these in each service's
-Settings tab by hand:
+Each service has its own config file at the repo root:
 
-| Service | Root Directory | Start Command | Type |
-|---|---|---|---|
-| processor | `processor` | `python main.py` | worker (no domain) |
-| portal | `portal` | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` | web |
-| mcp | `mcp` | `python server.py` | web |
+| Service | Config file | Runs |
+|---|---|---|
+| processor | `railway.processor.json` | `cd processor && python main.py` |
+| portal | `railway.portal.json` | `cd portal && uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| mcp | `railway.mcp.json` | `cd mcp && python server.py` |
 
-Build command is `pip install -r requirements.txt` for all of them. That file
-is at the **repo root**, not in the service directories: one dependency set for
-everything, which is what stopped the processor sitting a major version behind
-on `notion-client`. It also installs the shared `core` package in editable
-mode, which is how each service imports `core.*` while running from its own
-directory.
+In each Railway service: **Settings → Config-as-code → Config file path**, set
+to the matching filename above.
 
-Restart policy: on failure, max 10 retries.
+**Leave Root Directory unset (the repo root).** This is the part that is easy
+to get wrong: it is tempting to point each service at its own subdirectory, but
+`requirements.txt` and `pyproject.toml` live at the **repo root** - one
+dependency set for everything, which is what stopped the processor sitting a
+major version behind on `notion-client`. Point Root Directory at `portal/` and
+the build finds no `requirements.txt` and fails.
+
+So the build always runs from the root, and the start command `cd`s into the
+service. That is also what makes `-e .` work: it installs the shared `core`
+package in editable mode, which is how each service imports `core.*` while
+running from its own directory.
+
+Restart policy is set in the config files (on failure; 10 retries for the
+processor, 3 for the web services).
 
 **`mcp` no longer needs deploying.** Since 30 August 2026 the portal's chat
 runs CycleBot's tools in-process via `core.cyclebot`, and the only other
