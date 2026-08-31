@@ -150,17 +150,21 @@ It duplicated the portal with a weaker auth model and had drifted — beta heade
 URL-embedded key lands in browser history, in the `Referer` of any outbound
 link, and in anything that logs URLs.
 
-**It was the only consumer of the `mcp/` Railway service.** With it gone, that
-service has no callers and can stop being deployed. `mcp/server.py` stays in the
-repo regardless — see above.
+**It was the only consumer of the `mcp/` Railway service.** Both were deleted
+on 31 August 2026, and with them the `MCP_API_KEY` they shared — a single value,
+despite `.env.example` implying one key per caller. `mcp/server.py` stays in the
+repo regardless; see above.
 
-To finish, all outside this repo:
+If you ever want an MCP client again, generate a fresh key rather than reusing
+the old value, which spent months in front of a server that was not checking it:
 
-1. Delete the Vercel deployment and archive `icarusfall/cyclebot`
-2. Stop the `mcp` service on Railway (or leave it — it costs nothing idle)
-3. **Revoke the `MCP_API_KEY` value the Vercel app held.** Any key predating
-   30 August 2026 should be treated as compromised anyway, since the server
-   spent months not checking it.
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+The repo `icarusfall/cyclebot` can be archived rather than deleted, on the same
+reasoning as the other three: the commit messages are the only record of why
+some of this looks the way it does.
 
 ## WhatsApp: what it now takes
 

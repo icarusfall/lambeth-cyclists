@@ -121,11 +121,13 @@ processor, 3 for the web services.
 > later, `railway config migrate --apply` generates it, and the per-service
 > Config File Path must then be cleared so there is one source of truth.
 
-**`mcp` no longer needs deploying.** Since 30 August 2026 the portal's chat
-runs CycleBot's tools in-process via `core.cyclebot`, and the only other
-consumer - the Vercel front end at `cyclebot.vercel.app` - is being retired.
-Deploy this service only if you want CycleBot reachable by a third-party MCP
-client. See [cyclebot-architecture.md](cyclebot-architecture.md).
+**`mcp` is not deployed.** The portal's chat runs CycleBot's tools in-process
+via `core.cyclebot`, and the only other consumer - the Vercel front end at
+`cyclebot.vercel.app` - was deleted on 31 August 2026 along with this service.
+Create it again only if you want CycleBot reachable by a third-party MCP
+client, in which case it needs `PYTHONPATH=/app`, `NOTION_API_TOKEN` and a
+freshly generated `MCP_API_KEY` as well as the start command above. See
+[cyclebot-architecture.md](cyclebot-architecture.md).
 
 ---
 

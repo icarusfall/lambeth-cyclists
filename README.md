@@ -19,8 +19,8 @@ get them out to members.
 
 ## Services
 
-Two deployments, both on Railway, both from this repo. `mcp/` is a third
-service that no longer has callers - see below.
+Two deployments, both on Railway, both from this repo. `mcp/` is kept as a
+facade for MCP clients but is not deployed - nothing calls it.
 
 | Directory | What it is | Runs as |
 |---|---|---|

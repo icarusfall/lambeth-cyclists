@@ -1,8 +1,10 @@
 # Lambeth Cyclists — Project Management System
 
-> Last reviewed: **30 August 2026**. Earlier revisions described three separate
-> repos; they were merged into this one on that date. Items marked
-> **[UNCONFIRMED]** need Charlie to verify — do not treat them as fact.
+> Last reviewed: **31 August 2026**. Earlier revisions described three separate
+> repos; they were merged into this one on 30 August, and both services were
+> deployed from the merged repo on 31 August. **The consolidation is complete.**
+> Items marked **[UNCONFIRMED]** need Charlie to verify — do not treat them as
+> fact.
 
 ## The Problem
 
@@ -128,7 +130,36 @@ unauthenticated: `.env.example` documented the key and callers sent it, but
 `server.py` never read it, leaving every database readable by anyone with the
 URL. Fixed 30 August 2026; treat any key older than that as compromised.
 
-Nothing internal depends on this service any more. See weak point 2 below.
+**Not deployed.** Its only caller was `cyclebot.vercel.app`, deleted on
+31 August 2026 along with the Railway service and the key. The file stays
+because it is the one way a third-party MCP client could reach CycleBot, and
+at ~130 lines over `core.cyclebot` it costs nothing to keep. To bring it
+back: a new Railway service, `cd mcp && python server.py`, `PYTHONPATH=/app`,
+`NOTION_API_TOKEN`, and a freshly generated `MCP_API_KEY`
+(`python -c "import secrets; print(secrets.token_urlsafe(32))"`).
+
+---
+
+## Deployment
+
+Two Railway services, both from this repo, both built from the **repo root**
+(Root Directory unset) with a start command that `cd`s into the service:
+
+| Service | Start command |
+|---|---|
+| processor | `cd processor && python main.py` |
+| portal | `cd portal && uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+
+Both need **`PYTHONPATH=/app`**. `core/` is put on the path rather than
+installed: Railway's builder copies only `pyproject.toml` and
+`requirements.txt` into the install layer, so `pip install -e .` runs before
+`core/` exists and fails with `package directory 'core' does not exist`. It
+cannot work under that builder however the service is configured. Locally the
+whole tree is there, so `pip install -e .` is what the README asks for.
+
+There is no `Procfile` and no `railway.json`. Railway's Config as Code is
+deprecated in favour of Infrastructure as Code (`.railway/railway.ts`), which
+this repo has not adopted — see [docs/RAILWAY_DEPLOYMENT.md](docs/RAILWAY_DEPLOYMENT.md).
 
 ---
 
@@ -178,20 +209,16 @@ Ordered roughly by how much pain they cause:
    his Gmail OAuth token, his API keys. Nothing survives him being
    unavailable, and no volunteer can take a task without being handed
    credentials.
-2. **`cyclebot.vercel.app` is being retired.** A Next.js front end (repo
-   `icarusfall/cyclebot`) onto the same data, with URL-key auth (`?key=…` —
-   weak: it lands in browser history and `Referer` headers) and a beta header
-   that had drifted from the portal's. Confirmed 30 August 2026 as a
-   proof of concept that was never adopted; the portal's chat replaces it.
+2. **A green Railway service can be running old code.** When a deploy fails,
+   Railway keeps serving the last good build, so a service shows healthy while
+   running whatever last succeeded. The portal sat like that for a day: right
+   repo, right start command, failing every deploy, serving the pre-merge
+   build. Nothing in the dashboard says "you are looking at stale code" —
+   only the Deployments list does.
 
-   It was the only consumer of the `mcp/` Railway service, so once it is gone
-   **that service has no callers** and can stop being deployed. `mcp/server.py`
-   stays in the repo — it is ~130 lines over `core.cyclebot`, and it is the only
-   way a third-party MCP client could ever reach CycleBot.
-
-   Outstanding, all outside this repo: delete the Vercel deployment, archive
-   `icarusfall/cyclebot`, stop the `mcp` Railway service, and **revoke the
-   `MCP_API_KEY` value the Vercel app held**.
+   So **merging the repos and deploying the merged repo are two migrations,
+   not one**, and the second can silently not happen. After any change that
+   matters, check the deployment went green, not just that the push landed.
 3. **Silent failures, now partly visible.** The processor still logs an error
    and carries on when an analysis fails, writing placeholder text into
    Summary and AI Key Points. That is the right call — losing the email would
@@ -211,13 +238,25 @@ Ordered roughly by how much pain they cause:
    answers a question nobody is asking now. Whether this becomes a "who
    represents each ward" reference or goes is open. **[UNCONFIRMED]**
 
-Fixed on 30 August 2026, recorded because the shape of the code only makes
+---
+
+## Fixed
+
+On 30–31 August 2026, recorded because the shape of the code only makes
 sense with them in mind:
 
 - The processor ran a retired model for six weeks, filing every email
   unanalysed, because `MODEL` was written out in two files.
 - The MCP server ran unauthenticated: the key was documented and sent, and
   never read.
+- `cyclebot.vercel.app`, a second chat UI onto the same data with a key in the
+  URL, was a proof of concept never adopted. Deleted 31 August, along with the
+  `mcp` Railway service it was the only caller of, and the `MCP_API_KEY` it
+  used. `mcp/server.py` stays in the repo as a ~130-line facade over
+  `core.cyclebot` — the only way a third-party MCP client could reach CycleBot.
+- Every Railway deploy of the merged repo failed on `-e .` in
+  `requirements.txt`, and Railway went on serving the pre-merge build, so the
+  merge was invisible in production for a day. See weak point 2.
 - The three repos had two Notion layers at different major versions, and
   copies of the same helpers that had quietly diverged. `notion-client` is now
   v3 everywhere; the processor's old `<3` pin is gone.
