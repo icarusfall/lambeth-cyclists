@@ -16,6 +16,14 @@
 
 <h1>{{ p.title }}</h1>
 
+{% if not p.live %}
+<div class="banner warn">
+  <strong>This isn&rsquo;t live work any more &mdash; it&rsquo;s {{ p.status_label|lower }}.</strong>
+  Everything filed under it is still here, and you can still comment. Change
+  the status below if it turns out we&rsquo;re back on it.
+</div>
+{% endif %}
+
 {% if p.description %}<p class="lede">{{ p.description }}</p>{% endif %}
 
 {# ---------- Where it's up to ---------- #}
@@ -32,7 +40,8 @@
 </div>
 {% endif %}
 
-{# ---------- Who's on it, and what it wants ---------- #}
+{# ---------- Where it stands, who's on it, what it wants ---------- #}
+{% include "partials/_status.html" %}
 {% include "partials/_lead.html" %}
 {% include "partials/_help_needed.html" %}
 

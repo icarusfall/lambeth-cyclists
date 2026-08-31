@@ -47,8 +47,9 @@ async def work(request: Request, user: str = Depends(require_user)):
         "work.html",
         {
             "user": user,
-            "projects": [p for p in projects if not p["standing"]],
-            "standing": [p for p in projects if p["standing"]],
+            "projects": [p for p in projects if p["live"] and not p["standing"]],
+            "standing": [p for p in projects if p["live"] and p["standing"]],
+            "closed": [p for p in projects if not p["live"]],
             "error": error,
             "map": map_data,
             "mapbox_token": get_settings().mapbox_token,
@@ -104,6 +105,46 @@ async def project(request: Request, page_id: str, user: str = Depends(require_us
             "comment_target": f"/work/{page_id}/comment",
             "map": map_data,
             "mapbox_token": get_settings().mapbox_token,
+            "statuses": notion.PROJECT_STATUSES,
+        },
+    )
+
+
+@router.post("/work/{page_id}/status")
+async def set_status(
+    request: Request,
+    page_id: str,
+    status: str = Form(...),
+    outcome: str = Form(""),
+    user: str = Depends(require_user),
+):
+    """Move a project along — including off the front page.
+
+    Closing is not deleting. The project keeps its items, its discussion and
+    everything filed under it; it stops being listed as live work and moves to
+    "What we've finished with" instead.
+    """
+    error = None
+    try:
+        p = notion.set_project_status(page_id, status, outcome)
+        logger.info("%s set %s to %s", user, page_id, status)
+    except ValueError as e:
+        p = notion.project_detail(page_id)
+        error = str(e)
+    except Exception as e:
+        logger.exception("Setting status on %s failed", page_id)
+        p = notion.project_detail(page_id)
+        error = f"Couldn't save that: {e}"
+
+    return templates.TemplateResponse(
+        request,
+        "partials/_status.html",
+        {
+            "p": p,
+            "user": user,
+            "statuses": notion.PROJECT_STATUSES,
+            "saved": error is None,
+            "error": error,
         },
     )
 

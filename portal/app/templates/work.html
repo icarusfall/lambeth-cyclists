@@ -76,6 +76,30 @@
 </section>
 {% endif %}
 
+{% if closed %}
+<section>
+  <details class="closed-work">
+    <summary>
+      <strong>What we&rsquo;ve finished with</strong>
+      <span class="muted small">{{ closed|length }} &mdash; done, shelved or on hold</span>
+    </summary>
+    <p class="muted small">
+      Still here, still readable, just not what anyone is working on now.
+    </p>
+    {% for p in closed %}
+    <a class="card slim closed-row" href="/work/{{ p.id }}">
+      <span class="trail-body">
+        <span class="pile-title">{{ p.title }}</span>
+        <span class="muted small">
+          {{ p.status_label }}{% if p.outcome %} &middot; {{ p.outcome[:120] }}{% endif %}
+        </span>
+      </span>
+    </a>
+    {% endfor %}
+  </details>
+</section>
+{% endif %}
+
 <section>
   <div class="section-head"><h2>Not sure where to start?</h2></div>
   <div class="card">

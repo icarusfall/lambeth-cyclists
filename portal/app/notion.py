@@ -713,7 +713,44 @@ def projects_for_matching() -> list[dict]:
 # item writes only the item's side and every project reads as having none of
 # them. Item counts therefore come from querying Items, never from the project.
 
+# The Status select's options, each with the words the site uses for it and a
+# line explaining when to pick it. Notion keeps its own vocabulary; the portal
+# never shows it. Order is the order they appear on the form, which runs from
+# "hasn't started" through to "over".
+PROJECT_STATUSES = (
+    ("planning", "Getting started", "We mean to do this. It hasn't got going yet."),
+    ("active", "On the go", "Being worked on now."),
+    ("paused", "On hold", "Deliberately parked, to be picked up later."),
+    ("completed", "Finished", "It ran its course."),
+    ("archived", "Shelved", "Overtaken by events, or never got going."),
+)
+
+# What still counts as work the group is doing, and so appears on the front
+# page and can ask for help.
 PROJECT_LIVE_STATUSES = ("active", "planning")
+
+STATUS_LABELS = {key: label for key, label, _ in PROJECT_STATUSES}
+
+
+def set_project_status(page_id: str, status: str, outcome: str | None = None) -> dict:
+    """Move a project along, optionally recording how it ended.
+
+    Closing something is the one moment anybody is thinking about what
+    actually happened, so the form asks — and a group with this much turnover
+    is exactly the kind that loses that answer otherwise. Nothing is deleted:
+    a shelved project keeps its items, its discussion and its paper trail.
+    """
+    if status not in STATUS_LABELS:
+        raise ValueError(f"Not a status we use: {status!r}")
+
+    props: dict = {"Status": {"select": {"name": status}}}
+    if outcome is not None and outcome.strip():
+        props["Final Outcome"] = {
+            "rich_text": [{"type": "text", "text": {"content": outcome.strip()[:1900]}}]
+        }
+    client().pages.update(page_id=page_id, properties=props)
+    return project_detail(page_id)
+
 
 
 def _project_summary(raw: dict) -> dict:
@@ -749,6 +786,11 @@ def _project_summary(raw: dict) -> dict:
         "target": get_date_prop(raw, "Target Completion"),
         "lead": sel("Lead"),
         "help_needed": rt("Help Needed"),
+        "status_label": STATUS_LABELS.get(sel("Status"), sel("Status") or "Unknown"),
+        "live": sel("Status") in PROJECT_LIVE_STATUSES,
+        # How it ended. On the summary as well as the detail, because the
+        # front page's finished list is where it does the most good.
+        "outcome": rt("Final Outcome"),
     }
 
 
@@ -785,22 +827,17 @@ def _items_by_project() -> dict[str, list[dict]]:
 
 
 def project_overview() -> list[dict]:
-    """Every live project with what has landed under it — the front page.
+    """Every project with what has landed under it, live or not.
+
+    Not filtered by status: the callers want different slices — the front page
+    splits live from finished, the help page wants live only — and one query
+    beats three. Each record carries `live` for them to split on.
 
     Ordered so a newcomer meets the busiest work first: projects with recent
     post above quiet ones, and standing sweeps below campaigns of the same
     weight, because a sweep is rarely the thing somebody wants to join.
     """
-    raws = query(
-        get_settings().notion_projects_db,
-        filter_obj={
-            "or": [
-                {"property": "Status", "select": {"equals": s}}
-                for s in PROJECT_LIVE_STATUSES
-            ]
-        },
-        limit=60,
-    )
+    raws = query(get_settings().notion_projects_db, limit=60)
     grouped = _items_by_project()
     out = []
     for raw in raws:
@@ -843,7 +880,6 @@ def project_detail(page_id: str) -> dict:
 
     p["milestones"] = rt("Key Milestones")
     p["success_metrics"] = rt("Success Metrics")
-    p["outcome"] = rt("Final Outcome")
     p["website"] = (props.get("Campaign Website", {}) or {}).get("url")
     p["items"] = items_for_project(page_id)
     p["people"] = sorted({i["owner"] for i in p["items"] if i["owner"]})
@@ -902,7 +938,8 @@ def ways_to_help() -> list[dict]:
     Ordered by how easy it is to say yes to: a project that has spelled out
     what it wants comes above one that has only failed to name a lead.
     """
-    projects = project_overview()
+    # Live only. A shelved project asking for a hand would be a poor advert.
+    projects = [p for p in project_overview() if p["live"]]
     out = [p for p in projects if p["help_needed"] or not p["lead"]]
     out.sort(key=lambda p: (not p["help_needed"], p["standing"], p["title"].lower()))
     return out

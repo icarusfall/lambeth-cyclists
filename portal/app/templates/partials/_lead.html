@@ -11,11 +11,14 @@
     {% else %}
       <span class="muted small">&mdash; talk to {{ p.lead|capitalize }} in the discussion below if you want to help.</span>
     {% endif %}
-  {% else %}
+  {% elif p.live %}
     <span class="muted">Nobody is steering this one.</span>
     <form hx-post="/work/{{ p.id }}/lead" hx-target="#lead" hx-swap="outerHTML" class="lead-form">
       <button class="btn primary small-btn" type="submit">I&rsquo;ll take this on</button>
     </form>
+  {% else %}
+    {# Not live: don't invite anybody to pick up work that has stopped. #}
+    <span class="muted small">Nobody was steering this one.</span>
   {% endif %}
 
   {% if p.people %}

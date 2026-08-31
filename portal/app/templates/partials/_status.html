@@ -1,0 +1,46 @@
+{# Where a piece of work stands, and the way to move it on.
+
+   Swapped whole after a change, so it stands alone. Closing something is not
+   destructive and the copy says so: a shelved project keeps its items, its
+   discussion and its paper trail, it just stops appearing as live work. #}
+<div class="card slim status-box{{ '' if p.live else ' closed' }}" id="status">
+  <span class="muted small">Status</span>
+  <span class="tag status-{{ p.status }}">{{ p.status_label }}</span>
+
+  {% if p.outcome %}
+    <span class="muted small status-outcome">{{ p.outcome }}</span>
+  {% elif not p.live %}
+    <span class="muted small">No longer live work.</span>
+  {% endif %}
+
+  {% if saved %}<span class="flash ok small">Saved.</span>{% endif %}
+  {% if error %}<span class="flash err small">{{ error }}</span>{% endif %}
+
+  <details class="status-change">
+    <summary class="muted small">Change this</summary>
+    <form hx-post="/work/{{ p.id }}/status" hx-target="#status" hx-swap="outerHTML">
+      {% for key, label, when in statuses %}
+      <label class="inline status-option">
+        <input type="radio" name="status" value="{{ key }}"
+               {{ 'checked' if key == p.status }}>
+        <span><strong>{{ label }}</strong>
+          <span class="muted small">&mdash; {{ when }}</span></span>
+      </label>
+      {% endfor %}
+
+      <label>What happened? <span class="muted small">(optional &mdash; worth a
+        line if you&rsquo;re finishing or shelving it, so the next person
+        knows how it went)</span>
+        <textarea name="outcome" rows="2"
+                  placeholder="The elections came and went&hellip;">{{ p.outcome }}</textarea>
+      </label>
+
+      <div class="btnrow">
+        <button class="btn primary small-btn" type="submit">Save</button>
+        <span class="htmx-indicator spinner">saving&hellip;</span>
+        <span class="muted small">Nothing is deleted &mdash; it keeps everything
+        filed under it and drops off the front page.</span>
+      </div>
+    </form>
+  </details>
+</div>
