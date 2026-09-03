@@ -48,9 +48,17 @@ async def work(request: Request, user: str = Depends(require_user)):
         "work.html",
         {
             "user": user,
-            "projects": [p for p in projects if p["live"] and not p["standing"]],
-            "standing": [p for p in projects if p["live"] and p["standing"]],
-            "closed": [p for p in projects if not p["live"]],
+            # Internal work — the AGM, the remits, LCC's paperwork — is
+            # tracked like anything else but never shown here. This page is
+            # the one a stranger meets, and it should read as what the group
+            # does, not what it has to administer. It is on the desk instead.
+            "projects": [
+                p for p in projects if p["live"] and not p["standing"] and not p["internal"]
+            ],
+            "standing": [
+                p for p in projects if p["live"] and p["standing"] and not p["internal"]
+            ],
+            "closed": [p for p in projects if not p["live"] and not p["internal"]],
             "error": error,
             "map": map_data,
             "mapbox_token": get_settings().mapbox_token,

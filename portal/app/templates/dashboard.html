@@ -110,6 +110,40 @@
   {% endif %}
 </section>
 
+{# ---------------- Running the group ---------------- #}
+<section id="running-the-group">
+  <div class="section-head"><h2>Running the group</h2></div>
+  <p class="muted small">
+    The group&rsquo;s own housekeeping &mdash; the annual meeting, who holds which
+    remit, LCC&rsquo;s paperwork. Tracked like any other work, and open at its own
+    page, but kept off the front of the site: somebody arriving came to read
+    about the cycling.
+  </p>
+  {% if internal %}
+    {% for p in internal %}
+    <a class="card slim closed-row" href="/work/{{ p.id }}">
+      <span class="trail-body">
+        <span class="pile-title">{{ p.title }}</span>
+        <span class="muted small">
+          {{ p.status_label }}
+          {%- if p.lead %} &middot; {{ p.lead|capitalize }}{% endif -%}
+          {%- if p.next_action %} &middot; next: {{ p.next_action[:90] }}{% endif -%}
+          {%- if p.item_count %} &middot; {{ p.item_count }} thing{{ 's' if p.item_count != 1 }} filed{% endif -%}
+        </span>
+      </span>
+    </a>
+    {% endfor %}
+  {% else %}
+    <div class="card">
+      <p>Nothing here yet.</p>
+      <p class="muted small">
+        A project becomes internal by opening its description with
+        &ldquo;Internal.&rdquo; &mdash; the same way a standing sweep is marked.
+      </p>
+    </div>
+  {% endif %}
+</section>
+
 {# ---------------- Recently filed ---------------- #}
 {% if recent %}
 <section>

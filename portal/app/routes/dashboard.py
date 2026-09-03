@@ -45,6 +45,14 @@ async def desk(request: Request, user: str = Depends(require_user)):
             f"to add the Owner field. ({e})"
         )
 
+    # Running the group. Its own try because it is the newest thing on the
+    # page: a workspace with no internal projects yet should still get a desk.
+    internal = []
+    try:
+        internal = notion.running_the_group()
+    except Exception:
+        logger.exception("Loading internal projects failed")
+
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -58,6 +66,7 @@ async def desk(request: Request, user: str = Depends(require_user)):
             "health": health,
             "recent": recent,
             "drafts": drafts,
+            "internal": internal,
             "error": error,
         },
     )

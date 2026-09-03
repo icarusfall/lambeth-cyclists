@@ -2,7 +2,11 @@
 {% block title %}{{ p.title if p else 'Not found' }} — Lambeth Cyclists{% endblock %}
 {% block content %}
 
+{% if p and p.internal %}
+<p class="muted small"><a href="/desk#running-the-group">&larr; Running the group</a></p>
+{% else %}
 <p class="muted small"><a href="/">&larr; Everything we&rsquo;re working on</a></p>
+{% endif %}
 
 {% if error %}<p class="flash err">{{ error }}</p>{% endif %}
 {% if p %}
@@ -12,6 +16,7 @@
   {% if p.scope %}<span class="chip">{{ p.scope|replace('_',' ') }}</span>{% endif %}
   {% if p.priority %}<span class="chip{{ ' chip-strong' if p.priority in ('strategic','high') }}">{{ p.priority }}</span>{% endif %}
   {% if p.standing %}<span class="chip">ongoing</span>{% endif %}
+  {% if p.internal %}<span class="chip">running the group</span>{% endif %}
 </div>
 
 <h1>{{ p.title }}</h1>

@@ -678,6 +678,14 @@ def set_items_not_relevant(item_ids: list[str]) -> int:
 # triage the project actively wants matching items swept into it.
 STANDING_MARKER = "Standing project."
 
+# Running the group is work too — the AGM, the remits, LCC's governance
+# paperwork — and it is tracked here like anything else. It is just not what
+# somebody arriving at the site came to read, so it stays off the front page
+# and off the help page, and is collected on the coordinator's desk instead.
+# Same convention as above: a description opening with this marker, so a
+# project can be moved either way by editing it in Notion.
+INTERNAL_MARKER = "Internal."
+
 
 def projects_for_matching() -> list[dict]:
     """Every project with enough context for triage to match against.
@@ -697,6 +705,7 @@ def projects_for_matching() -> list[dict]:
                 "type": (props.get("Project Type", {}).get("select") or {}).get("name") or "",
                 "status": (props.get("Status", {}).get("select") or {}).get("name") or "",
                 "standing": desc.strip().startswith(STANDING_MARKER),
+                "internal": desc.strip().startswith(INTERNAL_MARKER),
             }
         )
     return out
@@ -763,10 +772,13 @@ def _project_summary(raw: dict) -> dict:
         return (props.get(name, {}).get("select") or {}).get("name")
 
     description = rt("Description")
-    # The marker is a triage convention, not something a reader needs to see.
+    # The markers are our conventions, not something a reader needs to see.
     standing = description.strip().startswith(STANDING_MARKER)
     if standing:
         description = description[len(STANDING_MARKER) :].strip()
+    internal = description.strip().startswith(INTERNAL_MARKER)
+    if internal:
+        description = description[len(INTERNAL_MARKER) :].strip()
 
     return {
         "id": raw["id"],
@@ -774,6 +786,7 @@ def _project_summary(raw: dict) -> dict:
         "title": get_page_title(raw),
         "description": description,
         "standing": standing,
+        "internal": internal,
         "status": sel("Status"),
         "type": sel("Project Type"),
         "priority": sel("Priority"),
@@ -938,11 +951,25 @@ def ways_to_help() -> list[dict]:
     Ordered by how easy it is to say yes to: a project that has spelled out
     what it wants comes above one that has only failed to name a lead.
     """
-    # Live only. A shelved project asking for a hand would be a poor advert.
-    projects = [p for p in project_overview() if p["live"]]
+    # Live only, and nothing internal. A shelved project asking for a hand
+    # would be a poor advert, and so would the AGM.
+    projects = [p for p in project_overview() if p["live"] and not p["internal"]]
     out = [p for p in projects if p["help_needed"] or not p["lead"]]
     out.sort(key=lambda p: (not p["help_needed"], p["standing"], p["title"].lower()))
     return out
+
+
+def running_the_group() -> list[dict]:
+    """Internal projects: the group's own housekeeping.
+
+    Kept off the front page and off the help page, because a stranger came to
+    read about the cycling, not the AGM. Not hidden, though — this is what the
+    desk lists, and every one of them is a normal project at /work/{id}.
+    Live ones first, then whatever has been closed.
+    """
+    projects = [p for p in project_overview() if p["internal"]]
+    projects.sort(key=lambda p: (not p["live"], p["title"].lower()))
+    return projects
 
 
 # ---------------------------------------------------------------------------

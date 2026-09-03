@@ -139,6 +139,21 @@ learn them.
 Nav shows five links and hides the machinery behind **More**, for the same
 reason.
 
+**Internal projects** — running the group rather than campaigning: the AGM,
+who holds which LCC "remit", the governance paperwork, whether to close the
+bank account. Tracked as ordinary projects, because the portal is meant to be
+the tracker for everything the group does, but kept off `/` and off `/help`,
+because somebody arriving came to read about the cycling. They collect on
+`/desk` under *Running the group*, linked from **More**, and each one is a
+normal page at `/work/{id}`. Triage still matches items into them, so LCC's
+own post files where it belongs. The mark is a description opening with
+`notion.INTERNAL_MARKER` ("Internal."), copying the older `STANDING_MARKER`
+convention: no new property, no migration, and a project moves either way by
+editing it in Notion. The line it draws is not *governance vs. campaigning* —
+it is *does a stranger need this*, which is why "Sharing out the jobs" is a
+front-page project despite being pure governance. Eleven remits between two
+people is the clearest ask the site has.
+
 **Discussion** is Notion's own page comments (`client.comments`), on both
 projects and items — not a sixth database, so a conversation started in the
 portal is the one Charlie sees in Notion. Everything posts as the integration,
