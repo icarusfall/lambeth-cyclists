@@ -6,6 +6,7 @@ queries and writes.
 """
 
 import json
+import hashlib
 import logging
 import re
 from datetime import date, datetime, timedelta, timezone
@@ -156,30 +157,63 @@ def _body_blocks(markdown_body: str) -> list[dict]:
     ]
 
 
+def newsletter_version(subject: str, markdown_body: str) -> str:
+    """A fingerprint of a draft's content, for noticing somebody else's save.
+
+    Several people can have the same draft open. Each form carries the
+    fingerprint of the draft as it was when they opened it, and a save is
+    refused if Notion's copy no longer matches — otherwise the second person
+    to press Save silently wipes out the first. Notion's own last_edited_time
+    cannot do this: it is rounded to the minute, so two saves inside one
+    minute look like none.
+    """
+    return hashlib.sha256(repr((subject, markdown_body)).encode("utf-8")).hexdigest()[:16]
+
+
 def save_newsletter_draft(
     title: str, subject: str, markdown_body: str, page_id: str | None = None
 ) -> str:
-    """Create or update a draft newsletter page. Returns the page id."""
+    """Create or update a draft newsletter page. Returns the page id.
+
+    An update writes the new body *before* removing the old one. The other
+    way round, a write Notion rejects — as every emoji did until 13 September
+    2026 — left the draft with no body at all, and on a shared draft that is
+    somebody else's work gone. A failure now leaves the old body where it was.
+    """
     db_id = get_settings().notion_newsletters_db
     properties = {
-        "Name": {"title": [{"type": "text", "text": {"content": title}}]},
         "Subject": {
-            "rich_text": [{"type": "text", "text": {"content": subject}}]
+            "rich_text": [{"type": "text", "text": {"content": clip_text(subject)}}]
         },
         "Status": {"select": {"name": NEWSLETTER_STATUS_DRAFT}},
     }
 
     if page_id:
-        client().pages.update(page_id=page_id, properties=properties)
-        # Replace existing body blocks
-        existing = client().blocks.children.list(block_id=page_id, page_size=100)
-        for block in existing.get("results", []):
-            client().blocks.delete(block_id=block["id"])
+        old_blocks, cursor = [], None
+        while True:
+            kwargs = {"block_id": page_id, "page_size": 100}
+            if cursor:
+                kwargs["start_cursor"] = cursor
+            listing = client().blocks.children.list(**kwargs)
+            old_blocks.extend(b["id"] for b in listing.get("results", []))
+            if not listing.get("has_more"):
+                break
+            cursor = listing.get("next_cursor")
+
         client().blocks.children.append(
             block_id=page_id, children=_body_blocks(markdown_body)
         )
+        # The name is left alone. It is set once, when the draft is started;
+        # re-deriving it on every save renamed a September draft "October" if
+        # anybody touched it on the first of the month.
+        client().pages.update(page_id=page_id, properties=properties)
+        for block_id in old_blocks:
+            client().blocks.delete(block_id=block_id)
         return page_id
 
+    properties["Name"] = {
+        "title": [{"type": "text", "text": {"content": clip_text(title)}}]
+    }
     page = client().pages.create(
         parent={"type": "data_source_id", "data_source_id": ds_id_for(db_id)},
         properties=properties,
@@ -189,22 +223,35 @@ def save_newsletter_draft(
 
 
 def load_newsletter(page_id: str) -> dict:
-    """Return {id, title, subject, status, markdown, ...props} for a newsletter page."""
+    """Return {id, title, subject, status, markdown, version, saved_at, ...} for a newsletter page."""
     page = client().pages.retrieve(page_id=page_id)
     simple = simplify_page(page)
     blocks = client().blocks.children.list(block_id=page_id, page_size=100)
-    markdown_body = ""
-    for block in blocks.get("results", []):
-        if block["type"] == "code":
-            markdown_body += rich_text_to_str(block["code"]["rich_text"])
-        elif block["type"] == "paragraph":
-            markdown_body += rich_text_to_str(block["paragraph"]["rich_text"]) + "\n\n"
+    results = blocks.get("results", [])
+
+    # The body is one code block. Read the *last* one: a save appends the new
+    # body before deleting the old, so if a delete ever fails part-way the
+    # stale copy sits above the current one, and joining them would double
+    # the newsletter.
+    code = [b for b in results if b["type"] == "code"]
+    if code:
+        markdown_body = rich_text_to_str(code[-1]["code"]["rich_text"])
+    else:
+        markdown_body = "".join(
+            rich_text_to_str(b["paragraph"]["rich_text"]) + "\n\n"
+            for b in results
+            if b["type"] == "paragraph"
+        )
+
+    subject = simple["props"].get("Subject", simple["title"])
     return {
         "id": page_id,
         "title": simple["title"],
-        "subject": simple["props"].get("Subject", simple["title"]),
+        "subject": subject,
         "status": simple["props"].get("Status", NEWSLETTER_STATUS_DRAFT),
         "markdown": markdown_body,
+        "version": newsletter_version(subject, markdown_body),
+        "saved_at": page.get("last_edited_time"),
         "props": simple["props"],
         "url": simple["url"],
     }

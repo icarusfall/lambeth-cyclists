@@ -7,8 +7,27 @@
   <p class="flash err">Couldn't load that draft: {{ existing.error }}</p>
 {% endif %}
 
+{% if existing and not existing.error %}
+<div class="card standout">
+  {% if opened_automatically %}
+    <p><strong>Carrying on with the draft in progress</strong>{% if saved_ago %} &mdash; last saved {{ saved_ago }}{% endif %}.</p>
+  {% else %}
+    <p><strong>{{ existing.title }}</strong>{% if saved_ago %} &mdash; last saved {{ saved_ago }}{% endif %}.</p>
+  {% endif %}
+  <p class="muted small">
+    Everyone who logs in sees this same draft. Save your changes and they&rsquo;ll
+    find them here; if somebody else saves while you have it open, you&rsquo;ll be
+    told before anything is overwritten.
+    {% if other_drafts %}
+      There {{ 'is' if other_drafts == 1 else 'are' }} {{ other_drafts }} other
+      draft{{ 's' if other_drafts != 1 }} as well &mdash; see <a href="/archive">Newsletters</a>.
+    {% endif %}
+    <a href="/newsletter?new=1">Start a separate new one instead</a>.
+  </p>
+</div>
+{% endif %}
+
 <form id="builder">
-  <input type="hidden" name="page_id" value="{{ existing.id if existing and not existing.error else '' }}">
 
   <section class="step">
     <h2><span class="stepnum">1</span> Gather stories</h2>
@@ -50,7 +69,7 @@
     </div>
     <div id="draft-area">
       {% if existing and not existing.error %}
-        {% with markdown_body=existing.markdown, subject=existing.subject, page_id=existing.id, saved=True %}
+        {% with markdown_body=existing.markdown, subject=existing.subject, page_id=existing.id, base_version=existing.version, saved=False %}
           {% include "partials/_draft.html" %}
         {% endwith %}
       {% endif %}

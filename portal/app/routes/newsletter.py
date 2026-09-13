@@ -1,5 +1,5 @@
 import logging
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse, Response
@@ -75,17 +75,66 @@ def stories_to_md(stories: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _ago(iso: str | None) -> str:
+    """'4 minutes ago', from a Notion timestamp.
+
+    Relative on purpose: Notion's times are UTC and Lambeth is not, and an
+    interval has no timezone to get wrong.
+    """
+    if not iso:
+        return ""
+    try:
+        then = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    mins = int((datetime.now(timezone.utc) - then).total_seconds() // 60)
+    if mins < 1:
+        return "just now"
+    if mins < 60:
+        return f"{mins} minute{'s' if mins != 1 else ''} ago"
+    hours = mins // 60
+    if hours < 24:
+        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+    days = hours // 24
+    return f"{days} day{'s' if days != 1 else ''} ago"
+
+
 @router.get("/newsletter")
 async def builder(
-    request: Request, id: str | None = None, user: str = Depends(require_user)
+    request: Request,
+    id: str | None = None,
+    new: bool = False,
+    user: str = Depends(require_user),
 ):
+    """The builder, opened on the draft in progress if there is one.
+
+    A saved draft belongs to the group, not to whichever browser saved it.
+    This page used to open blank unless the address carried ?id=, so a draft
+    saved and closed looked lost — and the natural next move, starting again,
+    makes a second one. `?new=1` is the deliberate way to do that.
+    """
     existing = None
+    other_drafts = 0
+    opened_automatically = False
+
+    if not id and not new:
+        try:
+            drafts = notion.current_drafts()
+            if drafts:
+                id = drafts[0]["id"]
+                other_drafts = len(drafts) - 1
+                opened_automatically = True
+        except Exception:
+            # Never fatal: the worst case is the blank builder it used to be.
+            logger.exception("Looking for a draft in progress failed")
+
     if id:
         try:
             existing = notion.load_newsletter(id)
         except Exception as e:
             logger.exception("Failed to load newsletter %s", id)
             existing = {"error": str(e)}
+
     return templates.TemplateResponse(
         request,
         "newsletter.html",
@@ -93,6 +142,9 @@ async def builder(
             "user": user,
             "month": month_label(),
             "existing": existing,
+            "opened_automatically": opened_automatically,
+            "other_drafts": other_drafts,
+            "saved_ago": _ago(existing.get("saved_at")) if existing else "",
             "group_email": get_settings().group_email,
         },
     )
@@ -209,6 +261,7 @@ async def draft(request: Request, user: str = Depends(require_user)):
             "markdown_body": markdown_body,
             "subject": form.get("subject") or f"Lambeth Cyclists — {month_label()}",
             "page_id": form.get("page_id") or "",
+            "base_version": form.get("base_version") or "",
             "saved": False,
         },
     )
@@ -232,30 +285,66 @@ async def save(
     markdown_body: str = Form(...),
     subject: str = Form(...),
     page_id: str = Form(""),
+    base_version: str = Form(""),
+    force: str = Form(""),
     user: str = Depends(require_user),
 ):
+    """Save the draft for everyone.
+
+    Refuses if somebody else has saved since this copy was opened, unless the
+    person has seen that warning and chosen to save over it. Whatever happens,
+    the text goes back into the box: a failed save used to replace the whole
+    draft area with an error, and the only copy left was in the clipboard.
+    """
+    page_id = page_id.strip()
+
+    def draft(**extra):
+        return templates.TemplateResponse(
+            request,
+            "partials/_draft.html",
+            {
+                "markdown_body": markdown_body,
+                "subject": subject,
+                "page_id": page_id,
+                "base_version": base_version,
+                "saved": False,
+                **extra,
+            },
+        )
+
     try:
+        if page_id and base_version and not force:
+            current = notion.load_newsletter(page_id)
+            if current["version"] != base_version:
+                logger.info("%s's save of %s refused: changed since opened", user, page_id)
+                return draft(conflict=True, saved_ago=_ago(current["saved_at"]))
+
         saved_id = notion.save_newsletter_draft(
             title=f"Newsletter — {month_label()}",
             subject=subject,
             markdown_body=markdown_body,
             page_id=page_id or None,
         )
+        saved = notion.load_newsletter(saved_id)
     except Exception as e:
         logger.exception("Save draft failed")
-        return templates.TemplateResponse(
-            request, "partials/_error.html", {"error": f"Saving to Notion failed: {e}"}
-        )
-    return templates.TemplateResponse(
+        return draft(error=f"Saving to Notion failed: {e}")
+
+    logger.info("%s saved newsletter draft %s", user, saved_id)
+    response = templates.TemplateResponse(
         request,
         "partials/_draft.html",
         {
             "markdown_body": markdown_body,
             "subject": subject,
             "page_id": saved_id,
+            "base_version": saved["version"],
             "saved": True,
         },
     )
+    # So a reload, a bookmark or a link pasted to Colin opens this draft.
+    response.headers["HX-Push-Url"] = f"/newsletter?id={saved_id}"
+    return response
 
 
 @router.post("/newsletter/{page_id}/discard")

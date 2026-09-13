@@ -1,5 +1,27 @@
-{% if saved %}<p class="flash ok">Draft saved to Notion.</p>{% endif %}
+{% if conflict %}
+<div class="flash err">
+  <p><strong>Somebody else has saved this draft since you opened it</strong>{% if saved_ago %} ({{ saved_ago }}){% endif %}.
+  Nothing has been overwritten, and your version is still in the box below &mdash; but it isn&rsquo;t saved.</p>
+  <p>
+    <a href="/newsletter?id={{ page_id }}" target="_blank">Open their version in a new tab</a>
+    and copy across anything you want to keep, then save. Or, if you&rsquo;re sure yours should win:
+  </p>
+  <div class="btnrow">
+    <button type="button" class="btn danger"
+            hx-post="/newsletter/save" hx-target="#draft-area" hx-swap="innerHTML"
+            hx-include="#builder" hx-vals='{"force": "1"}'
+            hx-confirm="Replace their saved version with yours? Their changes will be lost.">
+      Save mine over theirs
+    </button>
+  </div>
+</div>
+{% elif error %}
+<p class="flash err">{{ error }} Your text is still in the box below.</p>
+{% elif saved %}
+<p class="flash ok">Draft saved. Anyone who logs in can open it from Newsletter and carry on.</p>
+{% endif %}
 <input type="hidden" name="page_id" value="{{ page_id }}">
+<input type="hidden" name="base_version" value="{{ base_version or '' }}">
 <textarea name="markdown_body" rows="18" class="draft-md">{{ markdown_body }}</textarea>
 <div class="btnrow">
   <button type="button" class="btn"
