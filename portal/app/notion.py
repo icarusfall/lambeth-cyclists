@@ -141,11 +141,31 @@ def active_projects() -> list[dict]:
 # exact round-trip for editing in the portal, still readable in Notion.
 
 
+def _utf16_chunks(text: str, limit: int = TEXT_CHUNK) -> list[str]:
+    """Split text into pieces Notion will accept.
+
+    Notion's 2000 limit counts UTF-16 code units, the way JavaScript does, not
+    the characters Python counts. An emoji is one character to Python and two
+    units to Notion, so slicing every 2000 characters produces a piece that is
+    2000 plus however many emoji it holds — which Notion rejects, and the whole
+    save with it. Counting units, and never splitting between the two halves of
+    one emoji, keeps every piece inside the limit.
+    """
+    chunks, current, units = [], [], 0
+    for ch in text:
+        width = 2 if ord(ch) > 0xFFFF else 1
+        if units + width > limit:
+            chunks.append("".join(current))
+            current, units = [], 0
+        current.append(ch)
+        units += width
+    if current:
+        chunks.append("".join(current))
+    return chunks or [""]
+
+
 def _body_blocks(markdown_body: str) -> list[dict]:
-    chunks = [
-        markdown_body[i : i + TEXT_CHUNK]
-        for i in range(0, len(markdown_body), TEXT_CHUNK)
-    ] or [""]
+    chunks = _utf16_chunks(markdown_body)
     return [
         {
             "object": "block",
