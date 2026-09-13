@@ -26,6 +26,8 @@ from services.claude_service import ClaudeService
 from services.gmail_service import GmailService
 from services.notion_service import NotionService
 
+from core.notion import clip_text
+
 logger = get_logger(__name__)
 
 FAILURE_MARKERS = ("Error analyzing email content", "Error during AI analysis")
@@ -96,9 +98,9 @@ def write_back(notion, page_id, data):
     """Overwrite the placeholder fields with the real analysis."""
     props = {}
     if data.get("summary"):
-        props["Summary"] = {"rich_text": [{"text": {"content": str(data["summary"])[:2000]}}]}
+        props["Summary"] = {"rich_text": [{"text": {"content": clip_text(str(data["summary"]))}}]}
     if data.get("ai_key_points"):
-        props["AI Key Points"] = {"rich_text": [{"text": {"content": str(data["ai_key_points"])[:2000]}}]}
+        props["AI Key Points"] = {"rich_text": [{"text": {"content": clip_text(str(data["ai_key_points"]))}}]}
     for field, prop in (("project_type", "Project Type"), ("action_required", "Action Required"),
                         ("priority", "Priority")):
         if data.get(field):

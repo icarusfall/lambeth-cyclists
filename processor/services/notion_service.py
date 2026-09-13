@@ -10,6 +10,8 @@ from typing import List, Optional, Dict, Any
 from notion_client import Client
 from notion_client.errors import APIResponseError
 
+from core.notion import clip_text
+
 from config.settings import get_settings
 from config.logging_config import get_logger
 from models.notion_schemas import (
@@ -95,8 +97,8 @@ class NotionService:
     def _build_item_properties(self, item_data: NotionItemCreate) -> Dict[str, Any]:
         """Build Notion properties object for Item."""
         properties = {
-            "Title": {"title": [{"text": {"content": item_data.title}}]},
-            "Summary": {"rich_text": [{"text": {"content": item_data.summary}}]},
+            "Title": {"title": [{"text": {"content": clip_text(item_data.title)}}]},
+            "Summary": {"rich_text": [{"text": {"content": clip_text(item_data.summary)}}]},
             "Date Received": {"date": {"start": item_data.date_received.isoformat()}},
             "Has Attachments": {"checkbox": item_data.has_attachments},
             "Status": {"select": {"name": item_data.status}},
@@ -106,19 +108,19 @@ class NotionService:
 
         # Optional text fields
         if item_data.gmail_message_id:
-            properties["Gmail Message ID"] = {"rich_text": [{"text": {"content": item_data.gmail_message_id}}]}
+            properties["Gmail Message ID"] = {"rich_text": [{"text": {"content": clip_text(item_data.gmail_message_id)}}]}
         if item_data.sender_email:
             properties["Sender Email"] = {"email": item_data.sender_email}
         if item_data.ai_key_points:
-            properties["AI Key Points"] = {"rich_text": [{"text": {"content": item_data.ai_key_points[:2000]}}]}
+            properties["AI Key Points"] = {"rich_text": [{"text": {"content": clip_text(item_data.ai_key_points)}}]}
         if item_data.lambeth_cyclist_thoughts:
-            properties["Lambeth Cyclist Thoughts"] = {"rich_text": [{"text": {"content": item_data.lambeth_cyclist_thoughts[:2000]}}]}
+            properties["Lambeth Cyclist Thoughts"] = {"rich_text": [{"text": {"content": clip_text(item_data.lambeth_cyclist_thoughts)}}]}
         if item_data.attachment_urls:
-            properties["Attachment URLs"] = {"rich_text": [{"text": {"content": item_data.attachment_urls[:2000]}}]}
+            properties["Attachment URLs"] = {"rich_text": [{"text": {"content": clip_text(item_data.attachment_urls)}}]}
         if item_data.attachment_analysis:
-            properties["Attachment Analysis"] = {"rich_text": [{"text": {"content": item_data.attachment_analysis[:2000]}}]}
+            properties["Attachment Analysis"] = {"rich_text": [{"text": {"content": clip_text(item_data.attachment_analysis)}}]}
         if item_data.geocoded_coordinates:
-            properties["Geocoded Coordinates"] = {"rich_text": [{"text": {"content": item_data.geocoded_coordinates[:2000]}}]}
+            properties["Geocoded Coordinates"] = {"rich_text": [{"text": {"content": clip_text(item_data.geocoded_coordinates)}}]}
 
         # Optional URL fields
         if item_data.link_to_consultation:
@@ -294,8 +296,8 @@ class NotionService:
     def _build_project_properties(self, project_data: NotionProjectCreate) -> Dict[str, Any]:
         """Build Notion properties object for Project."""
         properties = {
-            "Project Name": {"title": [{"text": {"content": project_data.project_name}}]},
-            "Description": {"rich_text": [{"text": {"content": project_data.description}}]},
+            "Project Name": {"title": [{"text": {"content": clip_text(project_data.project_name)}}]},
+            "Description": {"rich_text": [{"text": {"content": clip_text(project_data.description)}}]},
             "Project Type": {"select": {"name": project_data.project_type}},
             "Status": {"select": {"name": project_data.status}},
             "Priority": {"select": {"name": project_data.priority}},
@@ -307,9 +309,9 @@ class NotionService:
         if project_data.target_completion:
             properties["Target Completion"] = {"date": {"start": project_data.target_completion.isoformat()}}
         if project_data.next_action:
-            properties["Next Action"] = {"rich_text": [{"text": {"content": project_data.next_action[:2000]}}]}
+            properties["Next Action"] = {"rich_text": [{"text": {"content": clip_text(project_data.next_action)}}]}
         if project_data.key_milestones:
-            properties["Key Milestones"] = {"rich_text": [{"text": {"content": project_data.key_milestones[:2000]}}]}
+            properties["Key Milestones"] = {"rich_text": [{"text": {"content": clip_text(project_data.key_milestones)}}]}
         if project_data.primary_locations:
             properties["Primary Locations"] = {"multi_select": [{"name": loc} for loc in project_data.primary_locations]}
         if project_data.geographic_scope:
@@ -319,13 +321,13 @@ class NotionService:
         if project_data.campaign_website:
             properties["Campaign Website"] = {"url": project_data.campaign_website}
         if project_data.related_documents:
-            properties["Related Documents"] = {"rich_text": [{"text": {"content": project_data.related_documents[:2000]}}]}
+            properties["Related Documents"] = {"rich_text": [{"text": {"content": clip_text(project_data.related_documents)}}]}
         if project_data.success_metrics:
-            properties["Success Metrics"] = {"rich_text": [{"text": {"content": project_data.success_metrics[:2000]}}]}
+            properties["Success Metrics"] = {"rich_text": [{"text": {"content": clip_text(project_data.success_metrics)}}]}
         if project_data.final_outcome:
-            properties["Final Outcome"] = {"rich_text": [{"text": {"content": project_data.final_outcome[:2000]}}]}
+            properties["Final Outcome"] = {"rich_text": [{"text": {"content": clip_text(project_data.final_outcome)}}]}
         if project_data.lessons_learned:
-            properties["Lessons Learned"] = {"rich_text": [{"text": {"content": project_data.lessons_learned[:2000]}}]}
+            properties["Lessons Learned"] = {"rich_text": [{"text": {"content": clip_text(project_data.lessons_learned)}}]}
 
         return properties
 
@@ -419,7 +421,7 @@ class NotionService:
     def _build_meeting_properties(self, meeting_data: NotionMeetingCreate) -> Dict[str, Any]:
         """Build Notion properties object for Meeting."""
         properties = {
-            "Meeting Title": {"title": [{"text": {"content": meeting_data.meeting_title}}]},
+            "Meeting Title": {"title": [{"text": {"content": clip_text(meeting_data.meeting_title)}}]},
             "Meeting Date": {"date": {"start": meeting_data.meeting_date.isoformat()}},
             "Meeting Type": {"select": {"name": meeting_data.meeting_type}},
             "Agenda Generation Status": {"select": {"name": meeting_data.agenda_generation_status}},
@@ -430,21 +432,21 @@ class NotionService:
         if meeting_data.meeting_format:
             properties["Meeting Format"] = {"select": {"name": meeting_data.meeting_format}}
         if meeting_data.location:
-            properties["Location"] = {"rich_text": [{"text": {"content": meeting_data.location}}]}
+            properties["Location"] = {"rich_text": [{"text": {"content": clip_text(meeting_data.location)}}]}
         if meeting_data.zoom_link:
             properties["Zoom Link"] = {"url": meeting_data.zoom_link}
         if meeting_data.auto_generated_agenda:
-            properties["Auto-Generated Agenda"] = {"rich_text": [{"text": {"content": meeting_data.auto_generated_agenda[:2000]}}]}
+            properties["Auto-Generated Agenda"] = {"rich_text": [{"text": {"content": clip_text(meeting_data.auto_generated_agenda)}}]}
         if meeting_data.manual_agenda_items:
-            properties["Manual Agenda Items"] = {"rich_text": [{"text": {"content": meeting_data.manual_agenda_items[:2000]}}]}
+            properties["Manual Agenda Items"] = {"rich_text": [{"text": {"content": clip_text(meeting_data.manual_agenda_items)}}]}
         if meeting_data.agenda_generated_at:
             properties["Agenda Generated At"] = {"date": {"start": meeting_data.agenda_generated_at.isoformat()}}
         if meeting_data.meeting_notes:
-            properties["Meeting Notes"] = {"rich_text": [{"text": {"content": meeting_data.meeting_notes[:2000]}}]}
+            properties["Meeting Notes"] = {"rich_text": [{"text": {"content": clip_text(meeting_data.meeting_notes)}}]}
         if meeting_data.decisions_made:
-            properties["Decisions Made"] = {"rich_text": [{"text": {"content": meeting_data.decisions_made[:2000]}}]}
+            properties["Decisions Made"] = {"rich_text": [{"text": {"content": clip_text(meeting_data.decisions_made)}}]}
         if meeting_data.action_items:
-            properties["Action Items"] = {"rich_text": [{"text": {"content": meeting_data.action_items[:2000]}}]}
+            properties["Action Items"] = {"rich_text": [{"text": {"content": clip_text(meeting_data.action_items)}}]}
         if meeting_data.next_meeting_date:
             properties["Next Meeting Date"] = {"date": {"start": meeting_data.next_meeting_date.isoformat()}}
         if meeting_data.agenda_trigger_date:
@@ -494,7 +496,7 @@ class NotionService:
         """
         try:
             properties = {
-                "Auto-Generated Agenda": {"rich_text": [{"text": {"content": agenda[:2000]}}]},
+                "Auto-Generated Agenda": {"rich_text": [{"text": {"content": clip_text(agenda)}}]},
                 "Agenda Generation Status": {"select": {"name": "generated"}},
                 "Agenda Generated At": {"date": {"start": datetime.now(timezone.utc).isoformat()}},
             }

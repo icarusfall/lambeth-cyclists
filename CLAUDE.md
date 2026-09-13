@@ -379,6 +379,14 @@ sense with them in mind:
 - The portal opened on the triage queue, which is a coordinator's page. On the
   day it was rewritten that queue showed one card, and the card was somebody
   volunteering to help. See [`portal/`](#portal).
+- Every write of free text to Notion was cut at `[:2000]` Python characters,
+  and some were not cut at all. Notion counts UTF-16 units, where an emoji is
+  two, so any text with emoji in it came out over the limit and the whole
+  write failed — found on 13 September 2026 when a newsletter with an
+  announcement pasted into it would not save, but the processor had the same
+  bug on every email it filed. All 34 writes now go through
+  `core.notion.clip_text`, or `split_text` where the text must survive whole.
+  Never slice text bound for Notion.
 - Five items' geocode JSON was silently truncated at exactly 2000 characters by
   Notion's `rich_text` cap, so it would not parse and those items had no
   location at all. The portal salvages what it can; **the processor still

@@ -19,6 +19,49 @@ that difference is deliberate rather than accidental:
 
 from datetime import date, datetime
 
+# Notion's cap on one piece of rich text, and on a title. It counts UTF-16
+# code units, the way JavaScript does — so an emoji, one character to Python,
+# is two to Notion. Slicing `text[:2000]` therefore produces something Notion
+# rejects whenever the text holds an emoji, and the whole write fails with it:
+# an item the processor never files, a newsletter that will not save. Every
+# write of free text goes through `clip_text` or `split_text` instead.
+TEXT_LIMIT = 2000
+
+
+def _units(ch: str) -> int:
+    return 2 if ord(ch) > 0xFFFF else 1
+
+
+def clip_text(text: str | None, limit: int = TEXT_LIMIT) -> str:
+    """As much of `text` as Notion will take, never cutting an emoji in half."""
+    if not text:
+        return ""
+    # Nearly everything is well under the limit; skip the walk when so.
+    if len(text) * 2 <= limit:
+        return text
+    units = 0
+    for i, ch in enumerate(text):
+        units += _units(ch)
+        if units > limit:
+            return text[:i]
+    return text
+
+
+def split_text(text: str | None, limit: int = TEXT_LIMIT) -> list[str]:
+    """`text` in pieces Notion will take, losing nothing — for bodies that must
+    survive whole, where `clip_text` would throw the end away."""
+    chunks, current, units = [], [], 0
+    for ch in text or "":
+        width = _units(ch)
+        if units + width > limit:
+            chunks.append("".join(current))
+            current, units = [], 0
+        current.append(ch)
+        units += width
+    if current:
+        chunks.append("".join(current))
+    return chunks or [""]
+
 
 def rich_text_to_str(rt_array) -> str:
     """Flatten a Notion rich-text array to a plain string."""

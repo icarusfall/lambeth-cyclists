@@ -19,17 +19,16 @@ from core.notion import (
     extract_property_value,
     get_date_prop,
     get_page_title,
+    clip_text,
     rich_text_to_str,
     simplify_page,
+    split_text,
 )
 
 logger = logging.getLogger(__name__)
 
 NEWSLETTER_STATUS_DRAFT = "draft"
 NEWSLETTER_STATUS_SENT = "sent"
-
-# rich_text objects are capped at 2000 chars by the Notion API
-TEXT_CHUNK = 2000
 
 
 @lru_cache
@@ -141,31 +140,8 @@ def active_projects() -> list[dict]:
 # exact round-trip for editing in the portal, still readable in Notion.
 
 
-def _utf16_chunks(text: str, limit: int = TEXT_CHUNK) -> list[str]:
-    """Split text into pieces Notion will accept.
-
-    Notion's 2000 limit counts UTF-16 code units, the way JavaScript does, not
-    the characters Python counts. An emoji is one character to Python and two
-    units to Notion, so slicing every 2000 characters produces a piece that is
-    2000 plus however many emoji it holds — which Notion rejects, and the whole
-    save with it. Counting units, and never splitting between the two halves of
-    one emoji, keeps every piece inside the limit.
-    """
-    chunks, current, units = [], [], 0
-    for ch in text:
-        width = 2 if ord(ch) > 0xFFFF else 1
-        if units + width > limit:
-            chunks.append("".join(current))
-            current, units = [], 0
-        current.append(ch)
-        units += width
-    if current:
-        chunks.append("".join(current))
-    return chunks or [""]
-
-
 def _body_blocks(markdown_body: str) -> list[dict]:
-    chunks = _utf16_chunks(markdown_body)
+    chunks = split_text(markdown_body)
     return [
         {
             "object": "block",
@@ -529,7 +505,7 @@ def create_item(
     """
     props: dict = {
         "Title": {"title": [{"type": "text", "text": {"content": title[:200]}}]},
-        "Summary": {"rich_text": [{"type": "text", "text": {"content": summary[:2000]}}]},
+        "Summary": {"rich_text": [{"type": "text", "text": {"content": clip_text(summary)}}]},
         "Date Received": {"date": {"start": date.today().isoformat()}},
         "Project Type": {"select": {"name": project_type}},
         "Action Required": {"select": {"name": action_required}},
@@ -543,14 +519,14 @@ def create_item(
     if locations:
         props["Locations"] = {"multi_select": [{"name": l[:100]} for l in locations[:12]]}
     if key_points:
-        props["AI Key Points"] = {"rich_text": [{"type": "text", "text": {"content": key_points[:2000]}}]}
+        props["AI Key Points"] = {"rich_text": [{"type": "text", "text": {"content": clip_text(key_points)}}]}
 
     thoughts = why_we_care
     if added_by:
         thoughts = f"{thoughts}\n\nAdded by hand via the portal by {added_by}.".strip()
     if thoughts:
         props["Lambeth Cyclist Thoughts"] = {
-            "rich_text": [{"type": "text", "text": {"content": thoughts[:2000]}}]
+            "rich_text": [{"type": "text", "text": {"content": clip_text(thoughts)}}]
         }
 
     if deadline:
@@ -636,7 +612,7 @@ def create_project(
     """Create a Projects page. Status starts at 'planning'."""
     props: dict = {
         "Project Name": {"title": [{"type": "text", "text": {"content": title[:200]}}]},
-        "Description": {"rich_text": [{"type": "text", "text": {"content": description[:2000]}}]},
+        "Description": {"rich_text": [{"type": "text", "text": {"content": clip_text(description)}}]},
         "Project Type": {"select": {"name": project_type}},
         "Geographic Scope": {"select": {"name": geographic_scope}},
         "Priority": {"select": {"name": priority}},
@@ -647,7 +623,7 @@ def create_project(
     if places:
         props["Primary Locations"] = {"multi_select": [{"name": l[:100]} for l in places[:12]]}
     if next_action:
-        props["Next Action"] = {"rich_text": [{"type": "text", "text": {"content": next_action[:2000]}}]}
+        props["Next Action"] = {"rich_text": [{"type": "text", "text": {"content": clip_text(next_action)}}]}
 
     page = client().pages.create(
         parent={
@@ -775,7 +751,7 @@ def set_project_status(page_id: str, status: str, outcome: str | None = None) ->
     props: dict = {"Status": {"select": {"name": status}}}
     if outcome is not None and outcome.strip():
         props["Final Outcome"] = {
-            "rich_text": [{"type": "text", "text": {"content": outcome.strip()[:1900]}}]
+            "rich_text": [{"type": "text", "text": {"content": clip_text(outcome.strip(), 1900)}}]
         }
     client().pages.update(page_id=page_id, properties=props)
     return project_detail(page_id)
@@ -958,7 +934,7 @@ def set_help_needed(page_id: str, text: str):
     client().pages.update(
         page_id=page_id,
         properties={
-            HELP_PROP: {"rich_text": [{"type": "text", "text": {"content": text[:1900]}}]}
+            HELP_PROP: {"rich_text": [{"type": "text", "text": {"content": clip_text(text, 1900)}}]}
             if text.strip()
             else {"rich_text": []}
         },
@@ -1143,7 +1119,7 @@ def _comment_runs(author: str, text: str) -> list[dict]:
             "text": {"content": author.capitalize()},
             "annotations": {"bold": True},
         },
-        {"type": "text", "text": {"content": ": " + text[:1900]}},
+        {"type": "text", "text": {"content": ": " + clip_text(text, 1900)}},
     ]
 
 

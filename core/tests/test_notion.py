@@ -8,7 +8,10 @@ does not quietly collapse them into one and change what a caller sees.
 from datetime import date
 
 from core.notion import (
+    TEXT_LIMIT,
     DataSources,
+    clip_text,
+    split_text,
     extract_property_value,
     get_date_prop,
     get_page_title,
@@ -121,3 +124,55 @@ def test_data_source_lookup_is_cached_and_shapes_the_parent():
     assert ds.id_for("db1") == "ds_of_db1"
     assert client.calls == 1, "database ids are stable; look them up once"
     assert ds.parent("db2") == {"type": "data_source_id", "data_source_id": "ds_of_db2"}
+
+
+# ---------------------------------------------------------------------------
+# Fitting text inside Notion's limit
+# ---------------------------------------------------------------------------
+# Notion counts UTF-16 units. These pin that, because the obvious `[:2000]`
+# passes every test written in plain ASCII and fails in production the first
+# time somebody pastes an announcement with emoji in it.
+
+BIKE = "🚲"  # one character to Python, two units to Notion
+
+
+def units(text):
+    return len(text.encode("utf-16-le")) // 2
+
+
+def test_the_bug_this_exists_for():
+    # The newsletter that would not save: five emoji in the first 2000.
+    body = BIKE * 5 + "a" * 3000
+    assert units(body[:TEXT_LIMIT]) == 2005  # what slicing used to send
+    assert units(clip_text(body)) <= TEXT_LIMIT
+    assert all(units(c) <= TEXT_LIMIT for c in split_text(body))
+
+
+def test_clip_never_cuts_an_emoji_in_half():
+    text = "a" * 1999 + BIKE + "b"
+    clipped = clip_text(text)
+    assert clipped == "a" * 1999
+    assert units(clipped) <= TEXT_LIMIT
+
+
+def test_clip_leaves_short_text_alone():
+    assert clip_text("Acre Lane " + BIKE) == "Acre Lane " + BIKE
+    assert clip_text("") == ""
+    assert clip_text(None) == ""
+
+
+def test_clip_honours_a_smaller_limit():
+    assert units(clip_text(BIKE * 1000, 1900)) <= 1900
+
+
+def test_split_loses_nothing():
+    for body in (BIKE * 1500, "x" * 4500, "a" * 1999 + BIKE + "b" * 10):
+        pieces = split_text(body)
+        assert "".join(pieces) == body
+        assert all(units(p) <= TEXT_LIMIT for p in pieces)
+
+
+def test_split_of_nothing_is_one_empty_piece():
+    # Notion wants at least one rich-text run in a code block.
+    assert split_text("") == [""]
+    assert split_text(None) == [""]
