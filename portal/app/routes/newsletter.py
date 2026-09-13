@@ -1,5 +1,6 @@
 import logging
-from datetime import date, datetime, timezone
+import re
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse, Response
@@ -99,6 +100,64 @@ def _ago(iso: str | None) -> str:
     return f"{days} day{'s' if days != 1 else ''} ago"
 
 
+_MONTHS = (
+    "january", "february", "march", "april", "may", "june", "july",
+    "august", "september", "october", "november", "december",
+)
+
+
+def _mentions_date(text: str, when: date) -> bool:
+    """Whether text names this date the ways people write one: 23 September,
+    23rd Sept, September 23, Wednesday 23rd, 23/9."""
+    mon = _MONTHS[when.month - 1][:3] + "[a-z]*"
+    day = f"{when.day}(?:st|nd|rd|th)?"
+    patterns = (
+        rf"\b{day}\s+(?:of\s+)?{mon}\b",
+        rf"\b{mon}\s+{day}\b",
+        rf"\b{when.day}/0?{when.month}\b",
+        rf"\b{when.strftime('%A')}\s+{day}\b",
+    )
+    return any(re.search(p, text, re.IGNORECASE) for p in patterns)
+
+
+def _meetings_not_mentioned(markdown_body: str) -> list[dict]:
+    """Upcoming meetings this draft says nothing about.
+
+    The draft step is handed the diary, but only at the moment somebody
+    presses it: a draft pasted in, or written before the meeting went into
+    Notion, never hears about it. So the builder checks the text itself. A
+    meeting counts as mentioned if its date or its venue appears anywhere —
+    loose on purpose, because nagging about a meeting the draft already
+    covers is worse than missing one worded oddly. Only the next two months:
+    next year's AGM is not this newsletter's business.
+    """
+    horizon = date.today() + timedelta(days=60)
+    text = markdown_body or ""
+    out = []
+    for m in notion.upcoming_meetings():
+        props = m.get("props", {})
+        try:
+            when = date.fromisoformat(str(props.get("Meeting Date", ""))[:10])
+        except ValueError:
+            continue
+        if when > horizon:
+            continue
+        where = props.get("Location", "")
+        venue = where.split(",")[0].strip()
+        if _mentions_date(text, when) or (venue and venue.lower() in text.lower()):
+            continue
+        kind = (props.get("Meeting Type") or "meeting").replace("_", " ")
+        out.append(
+            {
+                "when": f"{when.strftime('%A')} {when.day} {when.strftime('%B')}",
+                "where": where,
+                "what": kind if "meeting" in kind else f"{kind} meeting",
+                "url": m.get("url"),
+            }
+        )
+    return out
+
+
 @router.get("/newsletter")
 async def builder(
     request: Request,
@@ -135,6 +194,14 @@ async def builder(
             logger.exception("Failed to load newsletter %s", id)
             existing = {"error": str(e)}
 
+    # Never fatal: a diary that will not load costs the nudge, not the page.
+    missing_meetings = []
+    if existing and not existing.get("error"):
+        try:
+            missing_meetings = _meetings_not_mentioned(existing["markdown"])
+        except Exception:
+            logger.exception("Checking the draft against the diary failed")
+
     return templates.TemplateResponse(
         request,
         "newsletter.html",
@@ -145,6 +212,7 @@ async def builder(
             "opened_automatically": opened_automatically,
             "other_drafts": other_drafts,
             "saved_ago": _ago(existing.get("saved_at")) if existing else "",
+            "missing_meetings": missing_meetings,
             "group_email": get_settings().group_email,
         },
     )
@@ -330,6 +398,14 @@ async def save(
         logger.exception("Save draft failed")
         return draft(error=f"Saving to Notion failed: {e}")
 
+    # Checked again on every save, so a meeting put in Notion while the draft
+    # is open still gets noticed.
+    missing_meetings = []
+    try:
+        missing_meetings = _meetings_not_mentioned(markdown_body)
+    except Exception:
+        logger.exception("Checking the draft against the diary failed")
+
     logger.info("%s saved newsletter draft %s", user, saved_id)
     response = templates.TemplateResponse(
         request,
@@ -339,6 +415,7 @@ async def save(
             "subject": subject,
             "page_id": saved_id,
             "base_version": saved["version"],
+            "missing_meetings": missing_meetings,
             "saved": True,
         },
     )

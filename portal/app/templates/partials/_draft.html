@@ -20,6 +20,17 @@
 {% elif saved %}
 <p class="flash ok">Draft saved. Anyone who logs in can open it from Newsletter and carry on.</p>
 {% endif %}
+{% if missing_meetings %}
+<div class="card standout">
+  <p><strong>This draft doesn&rsquo;t mention {{ 'the meeting' if missing_meetings|length == 1 else 'these meetings' }} in the diary:</strong></p>
+  <ul>
+    {% for m in missing_meetings %}
+    <li>{{ m.what|capitalize }} &mdash; {{ m.when }}{% if m.where %}, {{ m.where }}{% endif %}{% if m.url %} (<a href="{{ m.url }}" target="_blank">in Notion</a>){% endif %}</li>
+    {% endfor %}
+  </ul>
+  <p class="muted small">Checked by looking for the date or the venue in the text, so if you&rsquo;ve worded it unusually it may be wrong.</p>
+</div>
+{% endif %}
 <input type="hidden" name="page_id" value="{{ page_id }}">
 <input type="hidden" name="base_version" value="{{ base_version or '' }}">
 <textarea name="markdown_body" rows="18" class="draft-md">{{ markdown_body }}</textarea>
