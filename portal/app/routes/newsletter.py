@@ -557,7 +557,6 @@ async def send(
             "channels": channels,
             "group_result": group_result,
             "for_lcc": for_lcc,
-            "html_body": mailer.markdown_to_email_html(nl["markdown"]),
-            "text_body": nl["markdown"],
+            "copy": mailer.copy_paste_versions(nl["markdown"]),
         },
     )

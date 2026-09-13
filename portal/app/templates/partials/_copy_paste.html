@@ -1,0 +1,38 @@
+{# A newsletter in both forms, for pasting into the LCC messaging system.
+   Shared by the send page and the archive, and fed by
+   mailer.copy_paste_versions, so the two can never disagree. #}
+<div class="copy-paste">
+  <h3>Plain text</h3>
+  <p class="muted small">
+    For a box that takes ordinary text. Headings, lists and links are kept,
+    without any of the formatting marks.
+  </p>
+  <textarea id="copy-text" rows="12" readonly>{{ copy.text }}</textarea>
+  <div class="btnrow">
+    <button type="button" class="btn" onclick="copyBox('copy-text', this)">📋 Copy plain text</button>
+  </div>
+
+  <h3>HTML</h3>
+  <p class="muted small">
+    For an editor that accepts HTML source. The same layout as the emailed
+    version.
+  </p>
+  <textarea id="copy-html" rows="8" readonly class="draft-md">{{ copy.html }}</textarea>
+  <div class="btnrow">
+    <button type="button" class="btn" onclick="copyBox('copy-html', this)">📋 Copy HTML</button>
+  </div>
+</div>
+<script>
+function copyBox(id, btn) {
+  const box = document.getElementById(id);
+  const done = () => { btn.textContent = '✅ Copied'; };
+  // If the browser won't let us write the clipboard, select the text so a
+  // Ctrl+C still gets it.
+  const fallback = () => { box.focus(); box.select(); btn.textContent = 'Selected — press Ctrl+C'; };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(box.value).then(done, fallback);
+  } else {
+    fallback();
+  }
+}
+</script>

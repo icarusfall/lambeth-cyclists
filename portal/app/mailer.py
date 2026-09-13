@@ -1,10 +1,11 @@
 """Newsletter sending via Resend (same service the email processor uses)."""
 
 import logging
-
-import markdown as md
+import re
+from html.parser import HTMLParser
 
 from app.config import get_settings
+from app.web import render_markdown
 from core.mail import send as core_send
 
 logger = logging.getLogger(__name__)
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 def markdown_to_email_html(markdown_body: str) -> str:
     """Render newsletter markdown into a simple, phone-friendly HTML email."""
-    body_html = md.markdown(markdown_body, extensions=["extra"])
+    body_html = render_markdown(markdown_body)
     return f"""\
 <!doctype html>
 <html>
@@ -31,6 +32,116 @@ def markdown_to_email_html(markdown_body: str) -> str:
 </body>
 </html>
 """
+
+
+class _PlainText(HTMLParser):
+    """Rendered newsletter HTML -> text that reads properly wherever it lands.
+
+    Markdown is not plain text. Pasted into a box that doesn't render it,
+    `## Get involved`, `**Wednesday**` and `[the map](https://...)` arrive
+    exactly like that. So this works from the HTML the newsletter really
+    renders to, and keeps what the marks meant: headings and paragraphs as
+    blank-line breaks, line breaks as line breaks, list items as dashes or
+    numbers, links as the words followed by the address.
+    """
+
+    _BLOCKS = {
+        "p", "div", "h1", "h2", "h3", "h4", "h5", "h6",
+        "pre", "blockquote", "table", "tr", "ul", "ol", "hr",
+    }
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self.lists: list[list] = []  # ["ul"] or ["ol", next number]
+        self.links: list[tuple[str | None, int]] = []
+        self.in_pre = 0
+        # Inside a list item, blocks add no blank lines. Markdown wraps an
+        # item's text in <p> whenever the list has a nested list or a blank
+        # line in it, and giving that <p> the usual gaps split every such
+        # item into a lone dash with its words two lines below.
+        self.in_item = 0
+
+    def _gap(self):
+        if not self.in_item:
+            self.parts.append("\n\n")
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag in self._BLOCKS:
+            self._gap()
+        if tag == "hr":
+            self.parts.append("----")
+            self._gap()
+        elif tag == "pre":
+            self.in_pre += 1
+        elif tag in ("ul", "ol"):
+            self.lists.append([tag, 1])
+        elif tag == "li":
+            kind = self.lists[-1] if self.lists else ["ul", 1]
+            indent = "  " * max(len(self.lists) - 1, 0)
+            if kind[0] == "ol":
+                self.parts.append(f"\n{indent}{kind[1]}. ")
+                kind[1] += 1
+            else:
+                self.parts.append(f"\n{indent}- ")
+            self.in_item += 1
+        elif tag == "br":
+            self.parts.append("\n")
+        elif tag == "a":
+            self.links.append((attrs.get("href"), len(self.parts)))
+        elif tag == "img" and attrs.get("alt"):
+            self.parts.append(attrs["alt"])
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self.links:
+            href, start = self.links.pop()
+            words = "".join(self.parts[start:]).strip()
+            # A bare address is already its own text; don't print it twice.
+            if href and not href.startswith("#") and href not in words:
+                self.parts.append(f" ({href})")
+        elif tag == "pre":
+            self.in_pre -= 1
+        elif tag == "li" and self.in_item:
+            self.in_item -= 1
+        elif tag in ("ul", "ol") and self.lists:
+            self.lists.pop()
+        if tag in self._BLOCKS:
+            self._gap()
+
+    def handle_data(self, data):
+        if not self.in_pre:
+            data = re.sub(r"\s+", " ", data)
+        self.parts.append(data)
+
+    def text(self) -> str:
+        out = "".join(self.parts)
+        out = re.sub(r"[ \t]+\n", "\n", out)
+        # Stray spaces at the start of a line, but not a nested list's indent.
+        out = re.sub(r"\n[ \t]+(?=[^ \t])(?!(?:-|\d+\.) )", "\n", out)
+        out = re.sub(r"\n{3,}", "\n\n", out)
+        return out.strip() + "\n"
+
+
+def markdown_to_plain_text(markdown_body: str) -> str:
+    """The newsletter as plain text, with none of the markdown marks."""
+    parser = _PlainText()
+    parser.feed(render_markdown(markdown_body))
+    parser.close()
+    return parser.text()
+
+
+def copy_paste_versions(markdown_body: str) -> dict:
+    """The newsletter in both forms, for pasting into the LCC messaging system.
+
+    One place, used by the send page and the archive, so what somebody copies
+    from the archive a week later is exactly what the send page would have
+    given them on the day.
+    """
+    return {
+        "text": markdown_to_plain_text(markdown_body),
+        "html": markdown_to_email_html(markdown_body),
+    }
 
 
 def send_plain(to_email: str, subject: str, body_text: str) -> str:

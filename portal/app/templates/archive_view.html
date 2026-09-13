@@ -7,5 +7,19 @@
 {% if nl.status == 'draft' %}
 <p><a class="btn primary" href="/newsletter?id={{ nl.id }}">Continue editing →</a></p>
 {% endif %}
+{% if copy %}
+<p><a class="btn" href="#copy">Copy as plain text or HTML ↓</a></p>
+{% endif %}
 <div class="preview card">{{ html_body|safe }}</div>
+
+{% if copy %}
+<section id="copy">
+  <h2>Copy for the LCC messaging system</h2>
+  <p class="muted small">
+    {% if 'LCC' in (nl.props.get('Channels') or '') %}Marked as going out through LCC too. {% endif %}
+    Copy whichever version their system takes.
+  </p>
+  {% include "partials/_copy_paste.html" %}
+</section>
+{% endif %}
 {% endblock %}

@@ -9,7 +9,17 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 def render_markdown(text: str) -> str:
-    return md.markdown(text or "", extensions=["extra"])
+    """Markdown to HTML, the one way the portal does it.
+
+    `nl2br` makes a single line break a line break. Standard markdown joins
+    lines into one paragraph unless a blank line separates them — right for
+    prose wrapped at 80 columns, wrong for what people actually paste here.
+    The September 2026 newsletter was pasted in from an email, and its meeting
+    details, each on its own line, went out to the Google Group run together
+    into one. The builder's preview, the email, the archive and the plain-text
+    copy all render through this, so what you preview is what goes out.
+    """
+    return md.markdown(text or "", extensions=["extra", "nl2br"])
 
 
 _MONTHS = (
