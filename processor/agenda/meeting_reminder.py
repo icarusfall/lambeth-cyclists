@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List
 
 from config.logging_config import get_logger
+from config.settings import get_settings
 from services.notion_service import NotionService
 from services.email_service import EmailService
 from models.notion_schemas import NotionMeeting, NotionQueryFilter, NotionQuerySort
@@ -21,6 +22,29 @@ class MeetingReminder:
         """Initialize the meeting reminder system."""
         self.notion = NotionService()
         self.email = EmailService()
+
+    # When the day's reminders go out. The loop runs every
+    # MEETING_CHECK_INTERVAL seconds, and a daily reminder is sent only by the
+    # one pass that lands in the window opening at this hour — so it goes out
+    # once a day, not once an hour. Stateless on purpose: nothing to record in
+    # Notion, and nothing forgotten on a redeploy. 8am UTC is 9am in a British
+    # summer, 8am in winter.
+    DAILY_SEND_HOUR_UTC = 8
+
+    def _in_daily_window(self, now: datetime) -> bool:
+        """Whether this pass is the one that sends today's reminders.
+
+        The window is exactly as wide as the loop's interval. Each pass takes a
+        moment before the loop sleeps again, so passes are fractionally further
+        apart than the window is wide: two can never both land in it. The price
+        is that very occasionally a gap straddles the window and that day's
+        reminder is skipped — the right way round for a nag.
+        """
+        start = now.replace(
+            hour=self.DAILY_SEND_HOUR_UTC, minute=0, second=0, microsecond=0
+        )
+        interval = timedelta(seconds=get_settings().meeting_check_interval)
+        return start <= now < start + interval
 
     async def check_and_send_reminders(self):
         """
@@ -48,15 +72,19 @@ class MeetingReminder:
 
     async def _send_agenda_approval_reminders(self):
         """
-        Send daily reminders if agenda not approved in week before meeting.
+        Remind, once a day, that a meeting in the next week has an agenda
+        generated but not yet approved.
 
-        Only sends if:
-        - Meeting is 1-7 days away
-        - Agenda status is "generated" (not "approved" or "published")
-        - Haven't sent a reminder today
+        This used to promise "haven't sent a reminder today" and check nothing,
+        so on an hourly loop it sent every hour. That could not show until 30
+        August 2026, when the email service stopped crashing on construction;
+        the first meeting after that would have had about two days of hourly
+        nags.
         """
         try:
             now = datetime.now(timezone.utc)
+            if not self._in_daily_window(now):
+                return
             week_from_now = now + timedelta(days=7)
             tomorrow = now + timedelta(days=1)
 
@@ -157,30 +185,35 @@ class MeetingReminder:
 
     async def _send_minutes_reminders(self):
         """
-        Send reminder to add minutes for meetings that happened yesterday.
+        Remind, the morning after a meeting, to add its minutes.
 
-        Only sends if:
-        - Meeting was yesterday
-        - Meeting notes are empty
+        Once, in the daily window, for meetings dated yesterday that have no
+        notes. It used to look back over a 24-hour window on every hourly pass
+        — up to twenty-four reminders — and because a meeting's date usually
+        carries no time, and so reads as midnight, the first one arrived at
+        noon on the day of the meeting, asking for minutes of a meeting that
+        had not happened yet.
         """
         try:
             now = datetime.now(timezone.utc)
-            yesterday_start = now - timedelta(days=1, hours=12)  # Generous window
-            yesterday_end = now - timedelta(days=1) + timedelta(hours=12)
+            if not self._in_daily_window(now):
+                return
 
-            # Find meetings yesterday
+            today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            yesterday = today - timedelta(days=1)
+
             filters = [
                 NotionQueryFilter(
                     property_name="Meeting Date",
                     property_type="date",
                     condition="on_or_after",
-                    value=yesterday_start.isoformat()
+                    value=yesterday.isoformat()
                 ),
                 NotionQueryFilter(
                     property_name="Meeting Date",
                     property_type="date",
                     condition="before",
-                    value=yesterday_end.isoformat()
+                    value=today.isoformat()
                 )
             ]
 
